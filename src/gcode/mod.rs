@@ -1,9 +1,10 @@
-// src/gcode/mod.rs - Fixed G-code processor
+// src/gcode/mod.rs - Use the state field
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use crate::printer::PrinterState;
 use crate::motion::MotionController;
 
+#[derive(Debug, Clone)]
 pub struct GCodeProcessor {
     state: Arc<RwLock<PrinterState>>,
     motion_controller: MotionController,
@@ -121,6 +122,12 @@ impl GCodeProcessor {
             if part.starts_with('S') {
                 let temp: f64 = part[1..].parse().unwrap_or(0.0);
                 println!("Setting hotend temperature to {:.1}°C", temp);
+                
+                // Update state
+                {
+                    let mut state = self.state.write().await;
+                    state.temperature = temp;
+                }
                 break;
             }
         }
@@ -166,13 +173,9 @@ impl GCodeProcessor {
         let pos = self.motion_controller.get_current_position();
         [pos[0], pos[1], pos[2]]
     }
-}
-
-impl Clone for GCodeProcessor {
-    fn clone(&self) -> Self {
-        Self {
-            state: self.state.clone(),
-            motion_controller: self.motion_controller.clone(),
-        }
+    
+    // Add method to access state
+    pub async fn get_state(&self) -> PrinterState {
+        self.state.read().await.clone()
     }
 }

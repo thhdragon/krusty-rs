@@ -10,7 +10,7 @@ serde = { version = "*", features = ["derive"] }
 toml = "*"
 tracing = "*"
 tracing-subscriber = "*"
-tokio-serial = "*"
+tokio-serial = "5.4"
 rand = "*"
 
 [features]

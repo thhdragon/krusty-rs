@@ -1,7 +1,7 @@
-// src/hardware/mod.rs - Fixed hardware manager
+// src/hardware.rs - Fixed hardware manager
 use crate::config::Config;
-use std::time::Duration;
 
+#[derive(Debug, Clone)]
 pub struct HardwareManager {
     config: Config,
     connected: bool,
@@ -70,14 +70,5 @@ impl HardwareManager {
             let _ = self.send_command("disable_heaters").await;
         }
         Ok(())
-    }
-}
-
-impl Clone for HardwareManager {
-    fn clone(&self) -> Self {
-        Self {
-            config: self.config.clone(),
-            connected: self.connected,
-        }
     }
 }

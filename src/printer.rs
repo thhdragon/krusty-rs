@@ -1,4 +1,4 @@
-// src/printer.rs - Fixed printer system
+// src/printer.rs - Use all fields properly
 use std::sync::Arc;
 use tokio::sync::{RwLock, broadcast};
 use crate::config::Config;
@@ -79,5 +79,18 @@ impl Printer {
     pub async fn process_gcode(&mut self, gcode: &str) -> Result<(), Box<dyn std::error::Error>> {
         self.gcode_processor.process_command(gcode).await?;
         Ok(())
+    }
+    
+    // Add methods to use the fields
+    pub fn get_config(&self) -> &Config {
+        &self.config
+    }
+    
+    pub async fn get_state(&self) -> PrinterState {
+        self.state.read().await.clone()
+    }
+    
+    pub fn get_motion_controller(&self) -> &MotionController {
+        &self.motion_controller
     }
 }

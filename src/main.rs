@@ -1,4 +1,4 @@
-// src/main.rs - Improved main function
+// src/main.rs - Fixed main function
 mod printer;
 mod gcode;
 mod motion;
@@ -17,7 +17,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
     
     tracing::info!("Starting Krusty-RS 3D Printer OS");
-    tracing::info!("Build time: {}", env!("BUILD_TIME"));
+    // Remove the build time line or replace with:
+    tracing::info!("Version: 0.1.0");
     
     // Get configuration file path
     let args: Vec<String> = env::args().collect();
