@@ -112,7 +112,7 @@ impl PrinterHostOS {
         let motion_controller = MotionController::new(
             state.clone(),
             hardware_manager.clone(),
-            motion_config,
+            &config,
         )?;
         
         let gcode_processor = GCodeProcessor::new(

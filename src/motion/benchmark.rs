@@ -21,7 +21,7 @@ mod benchmark {
         let mut controller = MotionController::new(
             state,
             hardware_manager,
-            motion_config,
+            &config,
         )?;
         
         // Benchmark queueing performance

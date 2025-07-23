@@ -26,7 +26,7 @@ mod tests {
         let result = MotionController::new(
             state,
             hardware_manager,
-            motion_config,
+            &config,
         );
         
         assert!(result.is_ok());
@@ -48,7 +48,7 @@ mod tests {
         let mut controller = MotionController::new(
             state,
             hardware_manager,
-            motion_config,
+            &config,
         ).unwrap();
         
         // Queue a simple move
@@ -78,7 +78,7 @@ mod tests {
         let mut controller = MotionController::new(
             state,
             hardware_manager,
-            motion_config,
+            &config,
         ).unwrap();
         
         // Queue some moves

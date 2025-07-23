@@ -1,113 +1,63 @@
-// src/motion/mod.rs - Proper module declaration
+// src/motion/mod.rs
+
+// --- Submodules ---
+pub mod planner; // src/motion/planner/mod.rs
 pub mod kinematics;
 pub mod junction;
+pub mod stepper;
 pub mod shaper;
 pub mod trajectory;
-pub mod stepper;
-pub mod planner;
-pub mod snap_crackle;
-pub mod advanced_planner;
-pub mod adaptive_planner;
+// ... add other modules as needed
 
-// Re-export commonly used items
-pub use kinematics::{Kinematics, KinematicsType, create_kinematics};
-pub use junction::JunctionDeviation;
+// --- Re-exports for external use ---
 pub use planner::{MotionPlanner, MotionConfig, MotionType};
-pub use stepper::StepGenerator;
+// Add more as needed, e.g.:
+// pub use planner::{MotionSegment, AdaptiveMotionPlanner, SnapCrackleMotion};
 
+// --- Imports ---
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use crate::printer::PrinterState;
-use crate::hardware::{HardwareManager, TemperatureController};
-use crate::config::Config;
+use crate::hardware::HardwareManager;
 
-/// Main motion controller that orchestrates all motion operations
+
+#[derive(Clone)] // Remove Debug derive or implement manually
 pub struct MotionController {
-    /// Shared printer state
     state: Arc<RwLock<PrinterState>>,
-    
-    /// Hardware interface
     hardware_manager: HardwareManager,
-    
-    /// Motion planner
-    planner: MotionPlanner,
-    
-    /// Kinematics handler
-    kinematics: Box<dyn Kinematics>,
-    
-    /// Junction deviation calculator
-    junction_deviation: JunctionDeviation,
-    
-    /// Current position [X, Y, Z, E]
+    planner: MotionPlanner, // Use the new type
     current_position: [f64; 4],
-    
-    /// Step generator
-    step_generator: StepGenerator,
-}
-
-// Manual Debug implementation
-impl std::fmt::Debug for MotionController {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("MotionController")
-            .field("state", &"Arc<RwLock<PrinterState>>")
-            .field("hardware_manager", &self.hardware_manager)
-            .field("planner", &self.planner)
-            .field("kinematics", &"Box<dyn Kinematics>")
-            .field("junction_deviation", &self.junction_deviation)
-            .field("current_position", &self.current_position)
-            .field("step_generator", &self.step_generator)
-            .finish()
-    }
-}
-
-impl Default for MotionController {
-    fn default() -> Self {
-        let state = Arc::new(RwLock::new(PrinterState::new()));
-        let config = Config::default();
-        let hardware_manager = HardwareManager::new(config);
-        MotionController::new(state, hardware_manager)
-    }
+    // Remove or update other fields like kinematics, junction_deviation if they are now internal to the planner
+    // kinematics: Box<dyn Kinematics>,
+    // junction_deviation: JunctionDeviation,
 }
 
 impl MotionController {
     pub fn new(
         state: Arc<RwLock<PrinterState>>,
         hardware_manager: HardwareManager,
+        config: &crate::config::Config, // Pass config to configure the planner
     ) -> Self {
-        // Create motion configuration
-        let motion_config = MotionConfig {
-            max_velocity: [300.0, 300.0, 25.0, 50.0],
-            max_acceleration: [3000.0, 3000.0, 100.0, 1000.0],
-            max_jerk: [20.0, 20.0, 0.5, 2.0],
-            junction_deviation: 0.05,
-            axis_limits: [[0.0, 200.0], [0.0, 200.0], [0.0, 200.0]],
-            kinematics_type: KinematicsType::Cartesian,
-            minimum_step_distance: 0.001,
-            lookahead_buffer_size: 16,
-        };
-        
-        let planner = MotionPlanner::new(motion_config);
-        
-        // Create kinematics handler
-        let kinematics = create_kinematics(KinematicsType::Cartesian, [[0.0, 200.0], [0.0, 200.0], [0.0, 200.0]]);
-        
-        // Create junction deviation calculator
-        let junction_deviation = JunctionDeviation::new(0.05);
-        
-        // Create step generator with typical steps/mm values
-        let step_generator = StepGenerator::new(
-            [80.0, 80.0, 400.0, 100.0], // Steps per mm for X, Y, Z, E
-            [false, false, false, false], // No direction inversion
-        );
-        
+        // Create motion configuration using the new function
+        // let motion_config = MotionConfig::new_from_config(config);
+        // let planner = MotionPlanner::new(motion_config);
+
+        // Or use the direct constructor from config
+        let planner = MotionPlanner::new_from_config(config);
+
+        // Create kinematics handler (if still needed outside planner)
+        // let kinematics = create_kinematics(KinematicsType::Cartesian, [[0.0, 200.0], [0.0, 200.0], [0.0, 200.0]]);
+
+        // Create junction deviation calculator (if still needed outside planner)
+        // let junction_deviation = JunctionDeviation::new(0.05);
+
         Self {
             state,
             hardware_manager,
-            planner,
-            kinematics,
-            junction_deviation,
+            planner, // Use the new planner instance
             current_position: [0.0, 0.0, 0.0, 0.0],
-            step_generator,
+            // kinematics,
+            // junction_deviation,
         }
     }
 
@@ -123,116 +73,114 @@ impl MotionController {
         } else {
             current_e
         };
-        
+
         let feedrate = feedrate.unwrap_or(300.0);
         let target_4d = [target[0], target[1], target[2], target_e];
-        
-        // Convert Cartesian to motor coordinates using kinematics
-        let motor_target = self.kinematics.cartesian_to_motors(&[target[0], target[1], target[2]])?;
-        let motor_target_4d = [motor_target[0], motor_target[1], motor_target[2], target_e];
-        
+
         // Determine motion type
         let motion_type = if extrude.is_some() && extrude.unwrap() > 0.0 {
             MotionType::Print
         } else {
             MotionType::Travel
         };
-        
-        // Plan the move with proper kinematics
-        self.planner.plan_move(motor_target_4d, feedrate, motion_type)?;
-        
-        // Apply junction deviation optimization if there are queued moves
-        self.apply_junction_optimization(&motor_target_4d)?;
-        
-        // Update current position
+
+        // Plan the move using the new planner
+        self.planner.plan_move(target_4d, feedrate, motion_type).await?;
+
+        // Update current position in the controller as well (or rely on planner?)
         self.current_position = target_4d;
-        
-        // Generate and send steps
-        self.generate_and_send_steps(&motor_target_4d).await?;
-        
+
+        // Generate and send steps (placeholder)
+        // self.generate_and_send_steps(&target_4d).await?;
+
         // Update printer state
         {
             let mut state = self.state.write().await;
             state.position = [target_4d[0], target_4d[1], target_4d[2]];
         }
-        
-        Ok(())
-    }
 
-    /// Apply junction deviation optimization
-    fn apply_junction_optimization(&self, target: &[f64; 4]) -> Result<(), Box<dyn std::error::Error>> {
-        // Calculate unit vector for this move
-        let _unit_vector = JunctionDeviation::calculate_unit_vector(&self.current_position, target);
-        
-        // In a real implementation, this would optimize the motion queue
-        tracing::debug!("Applying junction deviation optimization");
-        
         Ok(())
     }
 
     pub async fn queue_home(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        tracing::info!("Homing all axes");
-        
-        // Home in Cartesian space, convert to motor space
-        let home_cartesian = [0.0, 0.0, 0.0];
-        let home_motors = self.kinematics.cartesian_to_motors(&home_cartesian)?;
-        let home_target = [home_motors[0], home_motors[1], home_motors[2], self.current_position[3]];
-        
-        self.planner.plan_move(
-            home_target,
-            50.0, // Slow homing speed
-            MotionType::Home,
-        )?;
-        
+        // println!("Homing all axes");
+        // Plan a home move to [0, 0, 0, current_e]
+        let home_target = [0.0, 0.0, 0.0, self.current_position[3]];
+        self.planner.plan_move(home_target, 50.0, MotionType::Home).await?; // Slow homing speed
+
         // Update position
-        self.current_position = [0.0, 0.0, 0.0, self.current_position[3]];
-        
+        self.current_position = home_target;
+
         // Send home command to hardware
         let _ = self.hardware_manager.send_command("home_all").await;
-        
+
         // Update printer state
         {
             let mut state = self.state.write().await;
             state.position = [0.0, 0.0, 0.0];
         }
-        
+
         Ok(())
     }
 
+    // Placeholder for step generation
+    /*
     async fn generate_and_send_steps(&mut self, target: &[f64; 4]) -> Result<(), Box<dyn std::error::Error>> {
         // Generate step commands using the step generator
-        let steps = self.step_generator.generate_steps(target);
-        
+        let steps = self.step_generator.generate_steps(target); // Assuming step_generator exists
+
         // Send each step command to hardware
         for step_cmd in steps {
             let mcu_cmd = step_cmd.to_mcu_command();
             let _ = self.hardware_manager.send_command(&mcu_cmd).await;
         }
-        
+
         Ok(())
     }
+    */
 
     pub fn emergency_stop(&mut self) {
-        tracing::warn!("Emergency stop activated - clearing motion queue");
+        // println!("Emergency stop activated - clearing motion queue");
         self.planner.clear_queue();
+        // Add hardware emergency stop commands if needed
+        // let _ = self.hardware_manager.send_command("emergency_stop").await;
     }
 
     pub fn get_current_position(&self) -> [f64; 4] {
+        // Could get from planner or maintain locally
+        // self.planner.get_current_position()
         self.current_position
+    }
+
+    // Forward the update call to the planner
+    pub async fn update(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        self.planner.update().await
+    }
+
+    // Add other methods as needed, forwarding to the planner where appropriate
+    pub fn queue_length(&self) -> usize {
+        self.planner.queue_length()
     }
 }
 
-// Manual Clone implementation for MotionController
-impl Clone for MotionController {
-    fn clone(&self) -> Self {
-        Self {
-            state: self.state.clone(),
-            hardware_manager: self.hardware_manager.clone(),
-            planner: self.planner.clone(),
-            kinematics: self.kinematics.clone(),
-            junction_deviation: self.junction_deviation.clone(),
-            current_position: self.current_position,
-            step_generator: self.step_generator.clone(),
-        }
+// Implement Debug manually for MotionController if it contains non-Debug types
+impl std::fmt::Debug for MotionController {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MotionController")
+            .field("state", &"Arc<RwLock<PrinterState>>")
+            .field("hardware_manager", &self.hardware_manager)
+            .field("planner", &self.planner) // This should work now if MotionPlanner implements Debug
+            .field("current_position", &self.current_position)
+            .finish()
+    }
+}
+
+impl Default for MotionController {
+    fn default() -> Self {
+        use crate::config::Config;
+        let state = Arc::new(RwLock::new(PrinterState::new()));
+        let hardware_manager = HardwareManager::new(Config::default());
+        let config = Config::default();
+        MotionController::new(state, hardware_manager, &config)
     }
 }

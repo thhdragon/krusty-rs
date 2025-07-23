@@ -48,7 +48,7 @@ impl Printer {
         let (shutdown_tx, _) = broadcast::channel(1);
         
         let hardware_manager = HardwareManager::new(config.clone());
-        let motion_controller = MotionController::new(state.clone(), hardware_manager.clone());
+        let motion_controller = MotionController::new(state.clone(), hardware_manager.clone(), &config);
         let gcode_processor = GCodeProcessor::new(state.clone(), motion_controller.clone());
         
         Ok(Self {
