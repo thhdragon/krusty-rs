@@ -1,8 +1,6 @@
-// src/config.rs - Fixed configuration system
+// src/config.rs - Single configuration file
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::fs::File;
-use std::io::Read;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Config {

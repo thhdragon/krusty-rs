@@ -54,7 +54,7 @@ impl Printer {
     }
     
     pub async fn start(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        println!("Starting printer OS");
+        tracing::info!("Starting printer OS");
         
         // Initialize hardware
         self.hardware_manager.initialize().await?;
@@ -65,12 +65,12 @@ impl Printer {
             state.ready = true;
         }
         
-        println!("Printer OS ready");
+        tracing::info!("Printer OS ready");
         Ok(())
     }
     
     pub async fn shutdown(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        println!("Shutting down printer OS");
+        tracing::info!("Shutting down printer OS");
         let _ = self.shutdown_tx.send(());
         self.hardware_manager.shutdown().await?;
         Ok(())
