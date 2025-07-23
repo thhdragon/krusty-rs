@@ -413,7 +413,7 @@ impl SnapCrackleMotion {
         // that satisfies all derivative constraints
         
         // Simplified calculation based on maximum velocity constraint
-        let min_time_velocity = distance / constraints.max_velocity;
+        let min_time_velocity = distance / constraints.max_velocity[0];
         
         // Add some buffer time for acceleration
         let min_time = min_time_velocity * 1.2;
@@ -428,12 +428,11 @@ impl SnapCrackleMotion {
 
     /// Set configuration
     pub fn set_config(&mut self, config: SnapCrackleConfig) {
-        let max_pop = config.max_pop;
-        let max_lock = config.max_lock;
-        self.config = config;
-        self.max_snap = self.config.max_snap;
-        self.max_crackle = self.config.max_crackle;
-        self.higher_order_controller.set_limits(max_pop, max_lock);
+        self.config = config.clone();
+        self.higher_order_controller.set_limits(
+            config.max_pop,
+            config.max_lock
+        );
     }
 
     /// Get performance statistics
@@ -570,7 +569,7 @@ impl VibrationCanceller {
         cancellation: &[CancellationPoint],
     ) -> Result<Vec<MotionPoint7D>, Box<dyn std::error::Error>> {
         // Apply cancellation signal to motion profile
-        let mut cancelled = profile.to_vec();
+        let cancelled = profile.to_vec();
         
         // This would involve sophisticated signal processing
         // to blend the cancellation signal with the original motion
@@ -652,7 +651,7 @@ impl VibrationPredictor {
                 amplitude,
                 frequency: freq,
                 phase: rand::random::<f64>() * 2.0 * std::f64::consts::PI,
-                axis: rand::random::<u32>() as usize % 3,
+                axis: (rand::random::<u32>() as usize) % 3,
                 confidence: 0.7, // Moderate confidence
             });
         }
@@ -829,10 +828,10 @@ impl SnapCrackleOptimizer {
         features.push((end.acceleration - start.acceleration).abs()); // Acceleration change
         
         // Current constraints (normalized)
-        features.push(constraints.max_velocity / 1000.0);
-        features.push(constraints.max_acceleration / 10000.0);
-        features.push(constraints.max_jerk / 100.0);
-        features.push(constraints.max_snap / 10000.0);
+        features.push(constraints.max_velocity[0] / 1000.0);
+        features.push(constraints.max_acceleration[0] / 10000.0);
+        features.push(constraints.max_jerk[0] / 100.0);
+        features.push(constraints.max_snap[0] / 10000.0);
         
         // Historical performance (would come from database)
         let avg_quality: f64 = if !self.performance_db.is_empty() {

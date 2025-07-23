@@ -13,6 +13,7 @@ tracing-subscriber = "*"
 tokio-serial = "5.4"
 rand = "*"
 uuid = { version = "1.17", features = ["v4"] }
+thiserror = "2.0.12"
 
 [features]
 default = []

@@ -8,6 +8,7 @@ mod config;
 use printer::Printer;
 use tokio::signal;
 use std::env;
+use tracing::{info, error};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -16,7 +17,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_max_level(tracing::Level::INFO)
         .init();
     
-    tracing::info!("Starting Krusty-RS 3D Printer OS");
+    info!("Starting Krusty-RS 3D Printer OS");
     
     // Get configuration file path
     let args: Vec<String> = env::args().collect();
@@ -30,7 +31,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = match config::load_config(config_path) {
         Ok(cfg) => cfg,
         Err(e) => {
-            tracing::error!("Failed to load config: {}", e);
+            error!("Failed to load config: {}", e);
             return Err(e);
         }
     };
@@ -39,11 +40,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut printer = Printer::new(config).await?;
     printer.start().await?;
     
-    tracing::info!("Printer OS is running. Press Ctrl+C to shutdown...");
+    info!("Printer OS is running. Press Ctrl+C to shutdown...");
     
     // Wait for shutdown signal
     signal::ctrl_c().await?;
-    tracing::info!("\nShutting down...");
+    info!("\nShutting down...");
     printer.shutdown().await?;
     
     Ok(())

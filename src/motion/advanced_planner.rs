@@ -131,6 +131,21 @@ impl MotionConfig {
     }
 }
 
+impl Default for MotionConfig {
+    fn default() -> Self {
+        Self {
+            max_velocity: [300.0, 300.0, 20.0, 50.0],
+            max_acceleration: [3000.0, 3000.0, 100.0, 1000.0],
+            max_jerk: [10.0, 10.0, 0.4, 2.0],
+            junction_deviation: 0.05,
+            axis_limits: [[0.0, 200.0], [0.0, 200.0], [0.0, 200.0]],
+            kinematics_type: KinematicsType::Cartesian,
+            minimum_step_distance: 0.001,
+            lookahead_buffer_size: 32,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum MotionType {
     Print,
@@ -405,7 +420,7 @@ impl AdvancedMotionPlanner {
         let now = std::time::Instant::now();
         let dt = (now - self.planner_state.last_update).as_secs_f64();
         self.planner_state.last_update = now;
-        
+
         // Check if we need to start a new block
         if self.planner_state.current_block.is_none() {
             if let Some(block) = self.motion_queue.pop_front() {
@@ -417,50 +432,53 @@ impl AdvancedMotionPlanner {
                 return Ok(());
             }
         }
-        
-        // Refactored: Take the current block out to avoid borrow conflicts
-        if self.planner_state.current_block.is_some() {
-            let block = self.planner_state.current_block.take().unwrap();
-            self.planner_state.block_time += dt;
-            
-            // Check if block is complete
-            if self.planner_state.block_time >= block.duration {
-                // Block complete - update position
-                self.current_position = block.target;
-                
-                // Update printer state
-                {
-                    let mut state = self.state.write().await;
-                    state.position = [
-                        self.current_position[0],
-                        self.current_position[1],
-                        self.current_position[2],
+
+        // Instead of borrowing and then assigning, check existence first
+        let has_current_block = self.planner_state.current_block.is_some();
+        if has_current_block {
+            // Take ownership of the block temporarily
+            if let Some(block) = self.planner_state.current_block.take() {
+                self.planner_state.block_time += dt;
+
+                // Check if block is complete
+                if self.planner_state.block_time >= block.duration {
+                    // Block complete - update position
+                    self.current_position = block.target;
+
+                    // Update printer state
+                    {
+                        let mut state = self.state.write().await;
+                        state.position = [
+                            self.current_position[0],
+                            self.current_position[1],
+                            self.current_position[2],
+                        ];
+                    }
+
+                    // Clear current block and reset block time
+                    self.planner_state.current_block = None;
+                    self.planner_state.block_time = 0.0;
+
+                    tracing::debug!(
+                        "Completed move to [{:.3}, {:.3}, {:.3}, {:.3}]",
+                        self.current_position[0], self.current_position[1], self.current_position[2], self.current_position[3]
+                    );
+                } else {
+                    // Interpolate position within block
+                    let progress = self.planner_state.block_time / block.duration;
+                    let current_pos = [
+                        self.current_position[0] + (block.target[0] - self.current_position[0]) * progress,
+                        self.current_position[1] + (block.target[1] - self.current_position[1]) * progress,
+                        self.current_position[2] + (block.target[2] - self.current_position[2]) * progress,
+                        self.current_position[3] + (block.target[3] - self.current_position[3]) * progress,
                     ];
+                    self.generate_steps(&current_pos, &block).await?;
+                    // Put the block back for the next update
+                    self.planner_state.current_block = Some(block);
                 }
-                
-                // Clear current block and reset block time
-                self.planner_state.current_block = None;
-                self.planner_state.block_time = 0.0;
-                
-                tracing::debug!(
-                    "Completed move to [{:.3}, {:.3}, {:.3}, {:.3}]",
-                    self.current_position[0], self.current_position[1], self.current_position[2], self.current_position[3]
-                );
-            } else {
-                // Interpolate position within block
-                let progress = self.planner_state.block_time / block.duration;
-                let current_pos = [
-                    self.current_position[0] + (block.target[0] - self.current_position[0]) * progress,
-                    self.current_position[1] + (block.target[1] - self.current_position[1]) * progress,
-                    self.current_position[2] + (block.target[2] - self.current_position[2]) * progress,
-                    self.current_position[3] + (block.target[3] - self.current_position[3]) * progress,
-                ];
-                self.generate_steps(&current_pos, &block).await?;
-                // Put the block back for the next update
-                self.planner_state.current_block = Some(block);
             }
         }
-        
+
         Ok(())
     }
 

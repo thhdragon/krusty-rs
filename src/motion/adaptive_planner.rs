@@ -4,7 +4,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use crate::printer::PrinterState;
 use crate::hardware::HardwareManager;
-use crate::motion::{MotionConfig, MotionType, MotionBlock};
+use crate::motion::advanced_planner::{MotionBlock, MotionType};
 
 /// Complete adaptive motion planner with real-time optimization
 pub struct AdaptiveMotionPlanner {
@@ -229,6 +229,12 @@ pub enum ShaperType {
     Custom { amplitudes: Vec<f64>, durations: Vec<f64> },
 }
 
+impl Default for ShaperType {
+    fn default() -> Self {
+        ShaperType::None
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct CompensationPoint {
     pub frequency: f64,
@@ -313,7 +319,10 @@ impl AdaptiveMotionPlanner {
                 max_acceleration: optimized_params.max_acceleration,
                 max_jerk: optimized_params.max_jerk,
                 junction_deviation: optimized_params.junction_deviation,
-                ..Default::default() // Fill in other defaults
+                axis_limits: [[0.0, 200.0], [0.0, 200.0], [0.0, 200.0]],
+                kinematics_type: crate::motion::kinematics::KinematicsType::Cartesian,
+                minimum_step_distance: 0.001,
+                lookahead_buffer_size: 32,
             },
         )?;
         
@@ -437,8 +446,8 @@ impl AdaptiveMotionPlanner {
 
     /// Set adaptive configuration
     pub fn set_config(&mut self, config: AdaptiveConfig) {
-        self.config = config;
-        self.optimizer.set_config(config.clone());
+        self.config = config.clone(); // Clone before moving
+        self.optimizer.set_config(config); // Use the moved value
     }
 }
 
@@ -658,7 +667,7 @@ impl PerformanceMonitor {
         if !self.vibration_buffer.is_empty() {
             let sum: f64 = self.vibration_buffer.iter().sum();
             metrics.avg_vibration = sum / self.vibration_buffer.len() as f64;
-            metrics.max_vibration = *self.vibration_buffer.iter().fold(&0.0, |a, b| a.max(b));
+            metrics.max_vibration = self.vibration_buffer.iter().fold(0.0f64, |a, &b| a.max(b)); // Use value, not reference
         }
         
         if !self.position_errors.is_empty() {
@@ -724,7 +733,7 @@ impl ErrorPredictor {
                 hidden[i] += self.model_weights[i][j] * feature;
             }
             hidden[i] += self.model_biases[i];
-            hidden[i] = hidden[i].max(0.0); // ReLU
+            hidden[i] = hidden[i].max(0.0f64); // Explicit f64
         }
         
         // Output layer (single output for error prediction)
@@ -734,7 +743,7 @@ impl ErrorPredictor {
         }
         
         // Sigmoid activation to bound output between 0 and 1
-        let predicted_error = 1.0 / (1.0 + (-output).exp());
+        let predicted_error = 1.0f64 / (1.0f64 + (-output).exp()); // Explicit f64
         
         // Scale to reasonable error range (0 to 0.1mm)
         Ok(predicted_error * 0.1)
@@ -798,7 +807,7 @@ impl VibrationAnalyzer {
                 amplitude: metrics.avg_vibration,
                 bandwidth: 5.0 + rand::random::<f64>() * 10.0,
                 quality_factor: 3.0 + rand::random::<f64>() * 2.0,
-                axis: rand::random::<u32>() as usize % 3, // Random axis
+                axis: (rand::random::<u32>() as usize) % 3, // Random axis
                 timestamp: std::time::Instant::now(),
             });
             
@@ -882,13 +891,6 @@ pub struct VibrationAnalysis {
     pub overall_level: f64,
 }
 
-// Helper implementations
-impl Default for ShaperType {
-    fn default() -> Self {
-        ShaperType::None
-    }
-}
-
 // MotionPlanner implementation (simplified)
 pub struct MotionPlanner {
     config: MotionConfig,
@@ -922,7 +924,33 @@ impl MotionPlanner {
             exit_speed: 0.0,
             motion_type,
             optimized: false,
-            timestamp: std::time::Instant::now(),
         })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct MotionConfig {
+    pub max_velocity: [f64; 4],
+    pub max_acceleration: [f64; 4],
+    pub max_jerk: [f64; 4],
+    pub junction_deviation: f64,
+    pub axis_limits: [[f64; 2]; 3],
+    pub kinematics_type: crate::motion::kinematics::KinematicsType,
+    pub minimum_step_distance: f64,
+    pub lookahead_buffer_size: usize,
+}
+
+impl Default for MotionConfig {
+    fn default() -> Self {
+        Self {
+            max_velocity: [300.0, 300.0, 20.0, 50.0],
+            max_acceleration: [3000.0, 3000.0, 100.0, 1000.0],
+            max_jerk: [10.0, 10.0, 0.4, 2.0],
+            junction_deviation: 0.05,
+            axis_limits: [[0.0, 200.0], [0.0, 200.0], [0.0, 200.0]],
+            kinematics_type: crate::motion::kinematics::KinematicsType::Cartesian,
+            minimum_step_distance: 0.001,
+            lookahead_buffer_size: 32,
+        }
     }
 }

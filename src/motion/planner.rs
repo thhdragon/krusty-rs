@@ -158,12 +158,17 @@ impl MotionPlanner {
     }
 }
 
-impl Clone for MotionPlanner {
-    fn clone(&self) -> Self {
+impl Default for MotionConfig {
+    fn default() -> Self {
         Self {
-            config: self.config.clone(),
-            queue: VecDeque::new(), // Start with empty queue
-            current_position: self.current_position,
+            max_velocity: [300.0, 300.0, 25.0, 50.0],
+            max_acceleration: [3000.0, 3000.0, 100.0, 1000.0],
+            max_jerk: [20.0, 20.0, 0.5, 2.0],
+            junction_deviation: 0.05,
+            axis_limits: [[0.0, 200.0], [0.0, 200.0], [0.0, 200.0]],
+            kinematics_type: crate::motion::kinematics::KinematicsType::Cartesian,
+            minimum_step_distance: 0.001,
+            lookahead_buffer_size: 16,
         }
     }
 }
