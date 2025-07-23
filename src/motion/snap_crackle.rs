@@ -118,15 +118,15 @@ pub struct BoundaryConditions {
 }
 
 /// Motion constraints for optimization
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)] // Remove Default from derive
 pub struct MotionConstraints {
-    pub max_velocity: f64,
-    pub max_acceleration: f64,
-    pub max_jerk: f64,
-    pub max_snap: f64,
-    pub max_crackle: f64,
-    pub max_pop: f64,
-    pub max_lock: f64,
+    pub max_velocity: [f64; 4],
+    pub max_acceleration: [f64; 4],
+    pub max_jerk: [f64; 4],
+    pub max_snap: [f64; 4],
+    pub max_crackle: [f64; 4],
+    pub max_pop: [f64; 4],
+    pub max_lock: [f64; 4],
 }
 
 /// Solver for boundary conditions
@@ -428,10 +428,12 @@ impl SnapCrackleMotion {
 
     /// Set configuration
     pub fn set_config(&mut self, config: SnapCrackleConfig) {
+        let max_pop = config.max_pop;
+        let max_lock = config.max_lock;
         self.config = config;
-        self.max_snap = config.max_snap;
-        self.max_crackle = config.max_crackle;
-        self.higher_order_controller.set_limits(config.max_pop, config.max_lock);
+        self.max_snap = self.config.max_snap;
+        self.max_crackle = self.config.max_crackle;
+        self.higher_order_controller.set_limits(max_pop, max_lock);
     }
 
     /// Get performance statistics
@@ -650,7 +652,7 @@ impl VibrationPredictor {
                 amplitude,
                 frequency: freq,
                 phase: rand::random::<f64>() * 2.0 * std::f64::consts::PI,
-                axis: rand::random::<usize>() % 3,
+                axis: rand::random::<u32>() as usize % 3,
                 confidence: 0.7, // Moderate confidence
             });
         }
@@ -773,16 +775,22 @@ impl SnapCrackleOptimizer {
         if should_accelerate {
             // Increase limits for better performance
             for i in 0..4 {
-                optimized.max_acceleration = constraints.max_acceleration * (1.0 + self.learning_rate);
+                optimized.max_acceleration[i] = constraints.max_acceleration[i] * (1.0 + self.learning_rate);
             }
-            optimized.max_jerk = constraints.max_jerk * (1.0 + self.learning_rate * 0.5);
-            optimized.max_snap = constraints.max_snap * (1.0 + self.learning_rate * 0.3);
+            for i in 0..4 {
+                optimized.max_jerk[i] = constraints.max_jerk[i] * (1.0 + self.learning_rate * 0.5);
+            }
+            for i in 0..4 {
+                optimized.max_snap[i] = constraints.max_snap[i] * (1.0 + self.learning_rate * 0.3);
+            }
         } else if features[1] > 0.05 { // High vibration
             // Decrease limits for stability
             for i in 0..4 {
-                optimized.max_acceleration = constraints.max_acceleration * (1.0 - self.learning_rate);
+                optimized.max_acceleration[i] = constraints.max_acceleration[i] * (1.0 - self.learning_rate);
             }
-            optimized.max_jerk = constraints.max_jerk * (1.0 - self.learning_rate * 0.5);
+            for i in 0..4 {
+                optimized.max_jerk[i] = constraints.max_jerk[i] * (1.0 - self.learning_rate * 0.5);
+            }
         }
         
         // Store performance record
@@ -859,16 +867,17 @@ impl SnapCrackleOptimizer {
 }
 
 // Implement Default for required types
+// Keep only one Default implementation - either derive or manual
 impl Default for MotionConstraints {
     fn default() -> Self {
         Self {
-            max_velocity: 300.0,
-            max_acceleration: 3000.0,
-            max_jerk: 20.0,
-            max_snap: 1000.0,
-            max_crackle: 5000.0,
-            max_pop: 25000.0,
-            max_lock: 125000.0,
+            max_velocity: [300.0, 300.0, 25.0, 50.0],
+            max_acceleration: [3000.0, 3000.0, 100.0, 1000.0],
+            max_jerk: [20.0, 20.0, 0.5, 2.0],
+            max_snap: [1000.0, 1000.0, 50.0, 200.0],
+            max_crackle: [5000.0, 5000.0, 250.0, 1000.0],
+            max_pop: [25000.0, 25000.0, 1250.0, 5000.0],
+            max_lock: [125000.0, 125000.0, 6250.0, 25000.0],
         }
     }
 }

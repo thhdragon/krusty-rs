@@ -1,14 +1,63 @@
-// src/motion/mod.rs - Fixed motion controller
+// src/motion/mod.rs - Proper module declaration
+pub mod kinematics;
+pub mod junction;
+pub mod shaper;
+pub mod trajectory;
+pub mod stepper;
+pub mod planner;
+pub mod snap_crackle;
+pub mod advanced_planner;
+pub mod adaptive_planner;
+
+// Re-export commonly used items
+pub use kinematics::{Kinematics, KinematicsType, create_kinematics};
+pub use junction::JunctionDeviation;
+pub use planner::{MotionPlanner, MotionConfig, MotionType};
+pub use stepper::StepGenerator;
+
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use crate::printer::PrinterState;
 use crate::hardware::HardwareManager;
 
-#[derive(Debug, Clone)]
+/// Main motion controller that orchestrates all motion operations
+#[derive(Clone)]
 pub struct MotionController {
+    /// Shared printer state
     state: Arc<RwLock<PrinterState>>,
+    
+    /// Hardware interface
     hardware_manager: HardwareManager,
-    current_position: [f64; 4], // X, Y, Z, E
+    
+    /// Motion planner
+    planner: MotionPlanner,
+    
+    /// Kinematics handler
+    kinematics: Box<dyn Kinematics>,
+    
+    /// Junction deviation calculator
+    junction_deviation: JunctionDeviation,
+    
+    /// Current position [X, Y, Z, E]
+    current_position: [f64; 4],
+    
+    /// Step generator
+    step_generator: StepGenerator,
+}
+
+// Manual Debug implementation
+impl std::fmt::Debug for MotionController {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MotionController")
+            .field("state", &"Arc<RwLock<PrinterState>>")
+            .field("hardware_manager", &self.hardware_manager)
+            .field("planner", &self.planner)
+            .field("kinematics", &"Box<dyn Kinematics>")
+            .field("junction_deviation", &self.junction_deviation)
+            .field("current_position", &self.current_position)
+            .field("step_generator", &self.step_generator)
+            .finish()
+    }
 }
 
 impl MotionController {
@@ -16,10 +65,40 @@ impl MotionController {
         state: Arc<RwLock<PrinterState>>,
         hardware_manager: HardwareManager,
     ) -> Self {
+        // Create motion configuration
+        let motion_config = MotionConfig {
+            max_velocity: [300.0, 300.0, 25.0, 50.0],
+            max_acceleration: [3000.0, 3000.0, 100.0, 1000.0],
+            max_jerk: [20.0, 20.0, 0.5, 2.0],
+            junction_deviation: 0.05,
+            axis_limits: [[0.0, 200.0], [0.0, 200.0], [0.0, 200.0]],
+            kinematics_type: KinematicsType::Cartesian,
+            minimum_step_distance: 0.001,
+            lookahead_buffer_size: 16,
+        };
+        
+        let planner = MotionPlanner::new(motion_config);
+        
+        // Create kinematics handler
+        let kinematics = create_kinematics(KinematicsType::Cartesian, [[0.0, 200.0], [0.0, 200.0], [0.0, 200.0]]);
+        
+        // Create junction deviation calculator
+        let junction_deviation = JunctionDeviation::new(0.05);
+        
+        // Create step generator with typical steps/mm values
+        let step_generator = StepGenerator::new(
+            [80.0, 80.0, 400.0, 100.0], // Steps per mm for X, Y, Z, E
+            [false, false, false, false], // No direction inversion
+        );
+        
         Self {
             state,
             hardware_manager,
+            planner,
+            kinematics,
+            junction_deviation,
             current_position: [0.0, 0.0, 0.0, 0.0],
+            step_generator,
         }
     }
 
@@ -39,14 +118,28 @@ impl MotionController {
         let feedrate = feedrate.unwrap_or(300.0);
         let target_4d = [target[0], target[1], target[2], target_e];
         
-        tracing::info!("Queuing linear move to [{:.3}, {:.3}, {:.3}, {:.3}] at {:.1}mm/s",
-                      target_4d[0], target_4d[1], target_4d[2], target_4d[3], feedrate);
+        // Convert Cartesian to motor coordinates using kinematics
+        let motor_target = self.kinematics.cartesian_to_motors(&[target[0], target[1], target[2]])?;
+        let motor_target_4d = [motor_target[0], motor_target[1], motor_target[2], target_e];
         
-        // Send step commands to hardware
-        self.send_steps_to_hardware(&target_4d).await?;
+        // Determine motion type
+        let motion_type = if extrude.is_some() && extrude.unwrap() > 0.0 {
+            MotionType::Print
+        } else {
+            MotionType::Travel
+        };
+        
+        // Plan the move with proper kinematics
+        self.planner.plan_move(motor_target_4d, feedrate, motion_type)?;
+        
+        // Apply junction deviation optimization if there are queued moves
+        self.apply_junction_optimization(&motor_target_4d)?;
         
         // Update current position
         self.current_position = target_4d;
+        
+        // Generate and send steps
+        self.generate_and_send_steps(&motor_target_4d).await?;
         
         // Update printer state
         {
@@ -57,8 +150,32 @@ impl MotionController {
         Ok(())
     }
 
+    /// Apply junction deviation optimization
+    fn apply_junction_optimization(&self, target: &[f64; 4]) -> Result<(), Box<dyn std::error::Error>> {
+        // Calculate unit vector for this move
+        let unit_vector = JunctionDeviation::calculate_unit_vector(&self.current_position, target);
+        
+        // In a real implementation, this would optimize the motion queue
+        tracing::debug!("Applying junction deviation optimization");
+        
+        Ok(())
+    }
+
     pub async fn queue_home(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        tracing::info!("Queuing home command");
+        tracing::info!("Homing all axes");
+        
+        // Home in Cartesian space, convert to motor space
+        let home_cartesian = [0.0, 0.0, 0.0];
+        let home_motors = self.kinematics.cartesian_to_motors(&home_cartesian)?;
+        let home_target = [home_motors[0], home_motors[1], home_motors[2], self.current_position[3]];
+        
+        self.planner.plan_move(
+            home_target,
+            50.0, // Slow homing speed
+            MotionType::Home,
+        )?;
+        
+        // Update position
         self.current_position = [0.0, 0.0, 0.0, self.current_position[3]];
         
         // Send home command to hardware
@@ -73,71 +190,27 @@ impl MotionController {
         Ok(())
     }
 
-    pub async fn queue_extruder_move(
-        &mut self,
-        amount: f64,
-        feedrate: Option<f64>,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let target_e = self.current_position[3] + amount;
-        let feedrate = feedrate.unwrap_or(20.0);
+    async fn generate_and_send_steps(&mut self, target: &[f64; 4]) -> Result<(), Box<dyn std::error::Error>> {
+        // Generate step commands using the step generator
+        let steps = self.step_generator.generate_steps(target);
         
-        tracing::info!("Queuing extruder move: {:.3}mm at {:.1}mm/s", amount, feedrate);
+        // Send each step command to hardware
+        for step_cmd in steps {
+            let mcu_cmd = step_cmd.to_mcu_command();
+            let _ = self.hardware_manager.send_command(&mcu_cmd).await;
+        }
         
-        // Send extruder command to hardware
-        let cmd = format!("extrude {} {}", amount, feedrate);
-        let _ = self.hardware_manager.send_command(&cmd).await;
-        
-        self.current_position[3] = target_e;
-        
-        Ok(())
-    }
-
-    pub async fn update(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        // Process motion updates
-        // In a real implementation, this would process queued moves
-        // For now, this is a placeholder that checks hardware status
-        let _ = self.hardware_manager.send_command("get_status").await;
         Ok(())
     }
 
     pub fn emergency_stop(&mut self) {
-        tracing::warn!("Emergency stop activated - clearing motion state");
-        self.current_position = [0.0, 0.0, 0.0, self.current_position[3]];
-        // In real implementation, this would clear the motion queue and stop motors
+        tracing::warn!("Emergency stop activated - clearing motion queue");
+        self.planner.clear_queue();
     }
 
     pub fn get_current_position(&self) -> [f64; 4] {
         self.current_position
     }
-    
-    // Helper method to send steps to hardware - now takes mutable self
-    async fn send_steps_to_hardware(&mut self, target: &[f64; 4]) -> Result<(), Box<dyn std::error::Error>> {
-        // Calculate steps needed (simplified)
-        let dx = target[0] - self.current_position[0];
-        let dy = target[1] - self.current_position[1];
-        let dz = target[2] - self.current_position[2];
-        let de = target[3] - self.current_position[3];
-        
-        if dx != 0.0 {
-            let cmd = format!("step X {} {}", dx.abs() as i32, if dx > 0.0 { 1 } else { 0 });
-            let _ = self.hardware_manager.send_command(&cmd).await;
-        }
-        
-        if dy != 0.0 {
-            let cmd = format!("step Y {} {}", dy.abs() as i32, if dy > 0.0 { 1 } else { 0 });
-            let _ = self.hardware_manager.send_command(&cmd).await;
-        }
-        
-        if dz != 0.0 {
-            let cmd = format!("step Z {} {}", dz.abs() as i32, if dz > 0.0 { 1 } else { 0 });
-            let _ = self.hardware_manager.send_command(&cmd).await;
-        }
-        
-        if de != 0.0 {
-            let cmd = format!("step E {} {}", de.abs() as i32, if de > 0.0 { 1 } else { 0 });
-            let _ = self.hardware_manager.send_command(&cmd).await;
-        }
-        
-        Ok(())
-    }
 }
+
+// Remove the manual Clone implementation since we're using #[derive(Clone)]

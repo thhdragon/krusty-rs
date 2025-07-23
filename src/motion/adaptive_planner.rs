@@ -151,7 +151,7 @@ pub struct ErrorPredictor {
     model_biases: Vec<f64>,
     
     /// Training data
-    training_ Vec<TrainingSample>,
+    training_data: Vec<TrainingSample>,
     
     /// Prediction confidence
     confidence: f64,
@@ -570,7 +570,7 @@ impl AdaptiveOptimizer {
         
         // Keep only recent history
         while self.convergence_tracker.improvement_history.len() > 20 {
-            self.convergence_tracker.improvement_history.pop_front();
+            self.convergence_tracker.pop_front();
         }
         
         // Calculate convergence score based on recent improvement
@@ -798,7 +798,7 @@ impl VibrationAnalyzer {
                 amplitude: metrics.avg_vibration,
                 bandwidth: 5.0 + rand::random::<f64>() * 10.0,
                 quality_factor: 3.0 + rand::random::<f64>() * 2.0,
-                axis: rand::random::<usize>() % 3, // Random axis
+                axis: rand::random::<u32>() as usize % 3, // Random axis
                 timestamp: std::time::Instant::now(),
             });
             

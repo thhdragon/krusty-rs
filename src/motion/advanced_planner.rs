@@ -418,8 +418,9 @@ impl AdvancedMotionPlanner {
             }
         }
         
-        // Process current block
-        if let Some(ref mut block) = self.planner_state.current_block {
+        // Refactored: Take the current block out to avoid borrow conflicts
+        if self.planner_state.current_block.is_some() {
+            let block = self.planner_state.current_block.take().unwrap();
             self.planner_state.block_time += dt;
             
             // Check if block is complete
@@ -437,27 +438,26 @@ impl AdvancedMotionPlanner {
                     ];
                 }
                 
-                // Clear current block
+                // Clear current block and reset block time
                 self.planner_state.current_block = None;
+                self.planner_state.block_time = 0.0;
                 
                 tracing::debug!(
                     "Completed move to [{:.3}, {:.3}, {:.3}, {:.3}]",
-                    block.target[0], block.target[1], block.target[2], block.target[3]
+                    self.current_position[0], self.current_position[1], self.current_position[2], self.current_position[3]
                 );
             } else {
                 // Interpolate position within block
                 let progress = self.planner_state.block_time / block.duration;
-                
-                // Simple linear interpolation (in advanced version, use proper motion profiles)
                 let current_pos = [
                     self.current_position[0] + (block.target[0] - self.current_position[0]) * progress,
                     self.current_position[1] + (block.target[1] - self.current_position[1]) * progress,
                     self.current_position[2] + (block.target[2] - self.current_position[2]) * progress,
                     self.current_position[3] + (block.target[3] - self.current_position[3]) * progress,
                 ];
-                
-                // Generate steps for current position
-                self.generate_steps(&current_pos, block).await?;
+                self.generate_steps(&current_pos, &block).await?;
+                // Put the block back for the next update
+                self.planner_state.current_block = Some(block);
             }
         }
         

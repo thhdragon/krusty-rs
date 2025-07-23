@@ -1,10 +1,10 @@
-// src/gcode/mod.rs - Use the state field
+// src/gcode.rs - Add Debug to MotionController
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use crate::printer::PrinterState;
 use crate::motion::MotionController;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone)] // This should work now
 pub struct GCodeProcessor {
     state: Arc<RwLock<PrinterState>>,
     motion_controller: MotionController,
