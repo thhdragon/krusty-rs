@@ -2,6 +2,7 @@
 use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 use tokio::sync::RwLock;
 use crate::file_manager::FileManager;
+use thiserror::Error;
 
 /// Represents a print job with its metadata and progress.
 #[derive(Debug, Clone)]
@@ -36,6 +37,16 @@ pub enum PrintStatus {
     Error,
 }
 
+#[derive(Debug, Error)]
+pub enum PrintJobError {
+    #[error("A print job is already active")] 
+    JobAlreadyActive,
+    #[error("File manager error: {0}")]
+    FileManager(#[from] crate::file_manager::FileManagerError),
+    #[error("Unknown error: {0}")]
+    Other(String),
+}
+
 /// Manages print jobs and their state.
 pub struct PrintManager {
     current_job: Arc<RwLock<Option<PrintJob>>>,
@@ -54,10 +65,10 @@ impl PrintManager {
     }
 
     /// Starts a new print job if none is active.
-    pub async fn start_print(&mut self, file_path: &str) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn start_print(&mut self, file_path: &str) -> Result<(), PrintJobError> {
         let mut job_guard = self.current_job.write().await;
         if job_guard.is_some() {
-            return Err("A print job is already active".into());
+            return Err(PrintJobError::JobAlreadyActive);
         }
         tracing::info!("Starting print job for file: {}", file_path);
         
@@ -82,7 +93,7 @@ impl PrintManager {
     }
 
     /// Pauses the current print job.
-    pub async fn pause_print(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn pause_print(&mut self) -> Result<(), PrintJobError> {
         let mut job_guard = self.current_job.write().await;
         if let Some(ref mut job) = *job_guard {
             job.status = PrintStatus::Paused;
@@ -93,7 +104,7 @@ impl PrintManager {
     }
 
     /// Resumes the current print job.
-    pub async fn resume_print(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn resume_print(&mut self) -> Result<(), PrintJobError> {
         let mut job_guard = self.current_job.write().await;
         if let Some(ref mut job) = *job_guard {
             job.status = PrintStatus::Printing;
@@ -104,7 +115,7 @@ impl PrintManager {
     }
 
     /// Cancels the current print job.
-    pub async fn cancel_print(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn cancel_print(&mut self) -> Result<(), PrintJobError> {
         let mut job_guard = self.current_job.write().await;
         if let Some(ref mut job) = *job_guard {
             job.status = PrintStatus::Cancelled;
@@ -121,7 +132,7 @@ impl PrintManager {
     }
 
     /// Updates the progress of the current print job.
-    pub async fn update_progress(&self, lines_processed: usize) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn update_progress(&self, lines_processed: usize) -> Result<(), PrintJobError> {
         let mut job_guard = self.current_job.write().await;
         if let Some(ref mut job) = *job_guard {
             job.current_line = lines_processed;

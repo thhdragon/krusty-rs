@@ -5,16 +5,16 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-tokio = { version = "*", features = ["full"] }
-serde = { version = "*", features = ["derive"] }
-toml = "*"
-tracing = "*"
-tracing-subscriber = "*"
-tokio-serial = "5.4"
-rand = "*"
+tokio = { version = "1.46.1", features = ["full"] }
+serde = { version = "1.0.219", features = ["derive"] }
+toml = "0.9.2"
+tracing = "0.1.41"
+tracing-subscriber = "0.3.19"
+tokio-serial = "5.4.5"
+rand = "0.9.2"
 uuid = { version = "1.17", features = ["v4"] }
 thiserror = "2.0.12"
-tempfile = "3.10"
+tempfile = "3.20"
 
 [features]
 default = []
@@ -22,11 +22,14 @@ benchmark = []
 web-interface = []
 
 [dev-dependencies]
-tokio-test = "0.4"
+tokio-test = "0.4.4"
 
-serde_json = "1.0"
+serde_json = "1.0.141"
 
 
 [[bin]]
 name = "printer-host"
 path = "src/main.rs"
+
+[profile.release]
+overflow-checks = true

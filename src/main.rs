@@ -26,12 +26,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         // Default to `printer.toml` in the executable's directory or `./src` for development
         let exe_path = env::current_exe()?;
-        let exe_dir = exe_path.parent().unwrap();
+        let exe_dir = exe_path.parent().ok_or("Failed to get executable directory")?;
         let dev_path = exe_dir.join("src/printer.toml");
         if dev_path.exists() {
-            dev_path.to_str().unwrap().to_string()
+            dev_path.to_str().ok_or("Invalid dev_path string")?.to_string()
         } else {
-            exe_dir.join("printer.toml").to_str().unwrap().to_string()
+            exe_dir.join("printer.toml").to_str().ok_or("Invalid printer.toml path string")?.to_string()
         }
     };
     
