@@ -51,6 +51,8 @@ pub struct PrinterConfig {
     pub max_z_velocity: f64,
     #[serde(default = "default_max_z_accel")]
     pub max_z_accel: f64,
+    #[serde(default)]
+    pub printer_name: Option<String>,
 }
 
 impl Default for PrinterConfig {
@@ -61,6 +63,7 @@ impl Default for PrinterConfig {
             max_accel: default_max_accel(),
             max_z_velocity: default_max_z_velocity(),
             max_z_accel: default_max_z_accel(),
+            printer_name: None,
         }
     }
 }

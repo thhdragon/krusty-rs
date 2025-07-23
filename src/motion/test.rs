@@ -101,6 +101,7 @@ mod tests {
                 max_accel: 3000.0,
                 max_z_velocity: 25.0,
                 max_z_accel: 100.0,
+                printer_name: None,
             },
             mcu: crate::config::McuConfig {
                 serial: "/dev/null".to_string(),

@@ -1,325 +1,188 @@
-// src/motion/trajectory.rs
-/// Trajectory generator for smooth motion with acceleration planning
-/// 
-/// This module implements trapezoidal velocity profiles and S-curve acceleration
-/// for smooth, precise motion control
-pub struct TrajectoryGenerator {
-    /// Maximum velocity (mm/s)
-    max_velocity: f64,
-    
-    /// Maximum acceleration (mm/s²)
-    max_acceleration: f64,
-    
-    /// Maximum jerk (mm/s³)
-    max_jerk: f64,
-    
-    /// Use S-curve acceleration instead of trapezoidal
-    use_s_curve: bool,
-}
+// src/motion/trajectory.rs - Add trajectory generation
+use std::collections::VecDeque;
 
-/// Motion profile types
-#[derive(Debug, Clone, PartialEq)]
-pub enum MotionProfile {
-    /// Trapezoidal velocity profile (accelerate, cruise, decelerate)
-    Trapezoidal,
-    
-    /// S-curve velocity profile (smooth acceleration/deceleration)
-    SCurve,
-}
-
-/// Motion state at a specific time
+/// Motion trajectory generator with proper acceleration control
 #[derive(Debug, Clone)]
-pub struct MotionState {
-    /// Position at this time (mm)
-    pub position: f64,
+pub struct TrajectoryGenerator {
+    /// Current position
+    current_position: [f64; 4],
     
-    /// Velocity at this time (mm/s)
-    pub velocity: f64,
+    /// Motion queue
+    motion_queue: VecDeque<TrajectorySegment>,
     
-    /// Acceleration at this time (mm/s²)
-    pub acceleration: f64,
-    
-    /// Time since start of move (seconds)
-    pub time: f64,
+    /// Trajectory configuration
+    config: TrajectoryConfig,
+}
+
+#[derive(Debug, Clone)]
+pub struct TrajectoryConfig {
+    pub max_velocity: [f64; 4],
+    pub max_acceleration: [f64; 4],
+    pub max_jerk: [f64; 4],
+    pub minimum_segment_time: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct TrajectorySegment {
+    pub target: [f64; 4],
+    pub start_velocity: [f64; 4],
+    pub end_velocity: [f64; 4],
+    pub acceleration: [f64; 4],
+    pub duration: f64,
+    pub motion_type: MotionType,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum MotionType {
+    Print,
+    Travel,
+    Home,
+    Extruder,
 }
 
 impl TrajectoryGenerator {
-    /// Create a new trajectory generator
-    pub fn new(
-        max_velocity: f64,
-        max_acceleration: f64,
-        max_jerk: f64,
-        use_s_curve: bool,
-    ) -> Self {
+    pub fn new(config: TrajectoryConfig) -> Self {
         Self {
-            max_velocity,
-            max_acceleration,
-            max_jerk,
-            use_s_curve,
+            current_position: [0.0, 0.0, 0.0, 0.0],
+            motion_queue: VecDeque::new(),
+            config,
         }
     }
 
-    /// Generate a motion trajectory for a linear move
-    /// 
-    /// # Arguments
-    /// * `distance` - Total distance to move (mm)
-    /// * `start_velocity` - Initial velocity (mm/s)
-    /// * `end_velocity` - Final velocity (mm/s)
-    /// * `requested_feedrate` - Desired cruising velocity (mm/s)
-    /// 
-    /// # Returns
-    /// * `Vec<MotionState>` - Motion states at regular time intervals
-    pub fn generate_trajectory(
-        &self,
-        distance: f64,
-        start_velocity: f64,
-        end_velocity: f64,
-        requested_feedrate: f64,
-    ) -> Result<Vec<MotionState>, Box<dyn std::error::Error>> {
-        if distance <= 0.0 {
-            return Ok(vec![]);
+    /// Generate trapezoidal velocity profile for a move
+    pub fn generate_trapezoidal_move(
+        &mut self,
+        target: [f64; 4],
+        feedrate: f64,
+        motion_type: MotionType,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let distance = self.calculate_distance(&self.current_position, &target);
+        
+        if distance < 0.001 {
+            return Ok(());
         }
         
-        // Calculate cruise velocity (limited by distance and acceleration)
-        let cruise_velocity = self.calculate_cruise_velocity(
+        // Calculate unit vector
+        let unit_vector = self.calculate_unit_vector(&self.current_position, &target);
+        
+        // Calculate limited velocity based on acceleration limits
+        let limited_velocity = self.limit_velocity_by_acceleration(&unit_vector, feedrate);
+        
+        // Calculate acceleration for each axis
+        let acceleration = self.calculate_axis_accelerations(&unit_vector);
+        
+        // Calculate trapezoidal profile parameters
+        let (accel_time, cruise_time, decel_time) = self.calculate_trapezoidal_times(
             distance,
-            start_velocity,
-            end_velocity,
-            requested_feedrate,
+            limited_velocity,
+            &acceleration,
         );
         
-        // Generate trajectory based on profile type
-        if self.use_s_curve {
-            self.generate_s_curve_trajectory(
-                distance,
-                start_velocity,
-                end_velocity,
-                cruise_velocity,
-            )
-        } else {
-            self.generate_trapezoidal_trajectory(
-                distance,
-                start_velocity,
-                end_velocity,
-                cruise_velocity,
-            )
-        }
-    }
-
-    /// Calculate maximum achievable cruise velocity for a move
-    fn calculate_cruise_velocity(
-        &self,
-        distance: f64,
-        start_velocity: f64,
-        end_velocity: f64,
-        requested_feedrate: f64,
-    ) -> f64 {
-        // Limit by maximum velocity setting
-        let mut cruise_velocity = requested_feedrate.min(self.max_velocity);
-        
-        // Limit by acceleration constraints
-        // Calculate minimum distance needed to accelerate from start to max velocity
-        let accel_distance = (cruise_velocity * cruise_velocity - start_velocity * start_velocity) 
-            / (2.0 * self.max_acceleration);
-        
-        // Calculate minimum distance needed to decelerate from max velocity to end
-        let decel_distance = (cruise_velocity * cruise_velocity - end_velocity * end_velocity) 
-            / (2.0 * self.max_acceleration);
-        
-        // If total required distance exceeds available distance, we can't reach max velocity
-        let total_required = accel_distance + decel_distance;
-        if total_required > distance {
-            // Solve for maximum achievable velocity
-            // This is the velocity where accel_distance + decel_distance = distance
-            // (v² - v₀²) / (2a) + (v² - v₁²) / (2a) = d
-            // Solving for v: v = sqrt((v₀² + v₁² + 2ad) / 2)
-            let achievable_velocity_squared = 
-                (start_velocity * start_velocity + end_velocity * end_velocity + 2.0 * self.max_acceleration * distance) / 2.0;
-            
-            cruise_velocity = achievable_velocity_squared.sqrt().min(self.max_velocity);
-        }
-        
-        cruise_velocity
-    }
-
-    /// Generate trapezoidal velocity profile trajectory
-    fn generate_trapezoidal_trajectory(
-        &self,
-        distance: f64,
-        start_velocity: f64,
-        end_velocity: f64,
-        cruise_velocity: f64,
-    ) -> Result<Vec<MotionState>, Box<dyn std::error::Error>> {
-        // Calculate phase distances
-        let accel_distance = (cruise_velocity * cruise_velocity - start_velocity * start_velocity) 
-            / (2.0 * self.max_acceleration);
-        
-        let decel_distance = (cruise_velocity * cruise_velocity - end_velocity * end_velocity) 
-            / (2.0 * self.max_acceleration);
-        
-        let cruise_distance = distance - accel_distance - decel_distance;
-        
-        // Calculate phase times
-        let accel_time = (cruise_velocity - start_velocity) / self.max_acceleration;
-        let cruise_time = if cruise_distance > 0.0 {
-            cruise_distance / cruise_velocity
-        } else {
-            0.0
+        let segment = TrajectorySegment {
+            target,
+            start_velocity: [0.0; 4],
+            end_velocity: [0.0; 4],
+            acceleration,
+            duration: accel_time + cruise_time + decel_time,
+            motion_type,
         };
-        let decel_time = (cruise_velocity - end_velocity) / self.max_acceleration;
         
-        let total_time = accel_time + cruise_time + decel_time;
+        self.motion_queue.push_back(segment);
+        self.current_position = target;
         
-        // Generate trajectory points at regular intervals
-        let time_step = 0.001; // 1ms intervals
-        let mut trajectory = Vec::new();
-        let mut current_time = 0.0;
+        tracing::debug!("Generated trapezoidal move: {:.3}mm @ {:.1}mm/s", distance, limited_velocity);
         
-        while current_time <= total_time {
-            let state = self.calculate_trapezoidal_state(
-                current_time,
-                distance,
-                start_velocity,
-                end_velocity,
-                cruise_velocity,
-                accel_time,
-                cruise_time,
-                decel_time,
-            );
-            
-            trajectory.push(state);
-            current_time += time_step;
-        }
-        
-        Ok(trajectory)
+        Ok(())
     }
 
-    /// Calculate motion state at specific time for trapezoidal profile
-    fn calculate_trapezoidal_state(
-        &self,
-        time: f64,
-        distance: f64,
-        start_velocity: f64,
-        end_velocity: f64,
-        cruise_velocity: f64,
-        accel_time: f64,
-        cruise_time: f64,
-        decel_time: f64,
-    ) -> MotionState {
-        let total_time = accel_time + cruise_time + decel_time;
-        
-        if time <= 0.0 {
-            return MotionState {
-                position: 0.0,
-                velocity: start_velocity,
-                acceleration: self.max_acceleration,
-                time: 0.0,
-            };
-        }
-        
-        if time >= total_time {
-            return MotionState {
-                position: distance,
-                velocity: end_velocity,
-                acceleration: -self.max_acceleration,
-                time: total_time,
-            };
-        }
-        
-        // Acceleration phase
-        if time <= accel_time {
-            let velocity = start_velocity + self.max_acceleration * time;
-            let position = start_velocity * time + 0.5 * self.max_acceleration * time * time;
-            return MotionState {
-                position,
-                velocity,
-                acceleration: self.max_acceleration,
-                time,
-            };
-        }
-        
-        // Cruise phase
-        if time <= accel_time + cruise_time {
-            let cruise_time_elapsed = time - accel_time;
-            let position = (start_velocity * accel_time + 0.5 * self.max_acceleration * accel_time * accel_time)
-                + cruise_velocity * cruise_time_elapsed;
-            return MotionState {
-                position,
-                velocity: cruise_velocity,
-                acceleration: 0.0,
-                time,
-            };
-        }
-        
-        // Deceleration phase
-        let decel_time_elapsed = time - accel_time - cruise_time;
-        let velocity = cruise_velocity - self.max_acceleration * decel_time_elapsed;
-        let position = (start_velocity * accel_time + 0.5 * self.max_acceleration * accel_time * accel_time)
-            + cruise_velocity * cruise_time
-            + cruise_velocity * decel_time_elapsed - 0.5 * self.max_acceleration * decel_time_elapsed * decel_time_elapsed;
-        
-        MotionState {
-            position,
-            velocity,
-            acceleration: -self.max_acceleration,
-            time,
-        }
+    fn calculate_distance(&self, start: &[f64; 4], end: &[f64; 4]) -> f64 {
+        let dx = end[0] - start[0];
+        let dy = end[1] - start[1];
+        let dz = end[2] - start[2];
+        let de = end[3] - start[3];
+        (dx * dx + dy * dy + dz * dz + de * de).sqrt()
     }
 
-    /// Generate S-curve trajectory (simplified implementation)
-    fn generate_s_curve_trajectory(
-        &self,
-        distance: f64,
-        start_velocity: f64,
-        end_velocity: f64,
-        cruise_velocity: f64,
-    ) -> Result<Vec<MotionState>, Box<dyn std::error::Error>> {
-        // S-curve implementation would involve:
-        // 1. Jerk-limited acceleration phases
-        // 2. Constant acceleration phases
-        // 3. Jerk-limited deceleration phases
-        // 4. Constant velocity cruise phase
+    fn calculate_unit_vector(&self, start: &[f64; 4], end: &[f64; 4]) -> [f64; 4] {
+        let distance = self.calculate_distance(start, end);
+        if distance == 0.0 {
+            return [0.0; 4];
+        }
         
-        // For now, we'll fall back to trapezoidal
-        // A full S-curve implementation is quite complex
-        self.generate_trapezoidal_trajectory(
-            distance,
-            start_velocity,
-            end_velocity,
-            cruise_velocity,
-        )
+        [
+            (end[0] - start[0]) / distance,
+            (end[1] - start[1]) / distance,
+            (end[2] - start[2]) / distance,
+            (end[3] - start[3]) / distance,
+        ]
     }
 
-    /// Get duration of a move with given parameters
-    pub fn calculate_move_duration(
+    fn limit_velocity_by_acceleration(&self, unit_vector: &[f64; 4], requested_velocity: f64) -> f64 {
+        let mut max_acceleration = f64::INFINITY;
+        
+        for i in 0..4 {
+            let component = unit_vector[i].abs();
+            if component > 0.0 {
+                let limit = self.config.max_acceleration[i] / component;
+                max_acceleration = max_acceleration.min(limit);
+            }
+        }
+        
+        // Calculate maximum velocity based on acceleration and distance
+        let distance = 10.0; // Assume reasonable distance for calculation
+        let accel_limited_velocity = (2.0 * max_acceleration * distance).sqrt();
+        
+        requested_velocity.min(accel_limited_velocity).max(0.1)
+    }
+
+    fn calculate_axis_accelerations(&self, unit_vector: &[f64; 4]) -> [f64; 4] {
+        let mut accelerations = [0.0; 4];
+        
+        for i in 0..4 {
+            accelerations[i] = unit_vector[i].abs() * self.config.max_acceleration[i];
+        }
+        
+        accelerations
+    }
+
+    fn calculate_trapezoidal_times(
         &self,
         distance: f64,
-        start_velocity: f64,
-        end_velocity: f64,
-        requested_feedrate: f64,
-    ) -> f64 {
-        let cruise_velocity = self.calculate_cruise_velocity(
-            distance,
-            start_velocity,
-            end_velocity,
-            requested_feedrate,
-        );
+        velocity: f64,
+        acceleration: &[f64; 4],
+    ) -> (f64, f64, f64) {
+        // Use average acceleration for time calculations
+        let avg_accel = (acceleration[0] + acceleration[1] + acceleration[2] + acceleration[3]) / 4.0;
         
-        let accel_time = (cruise_velocity - start_velocity) / self.max_acceleration;
-        let decel_time = (cruise_velocity - end_velocity) / self.max_acceleration;
+        if avg_accel <= 0.0 {
+            return (0.0, distance / velocity, 0.0);
+        }
         
-        let accel_distance = (cruise_velocity * cruise_velocity - start_velocity * start_velocity) 
-            / (2.0 * self.max_acceleration);
-        let decel_distance = (cruise_velocity * cruise_velocity - end_velocity * end_velocity) 
-            / (2.0 * self.max_acceleration);
+        let accel_time = velocity / avg_accel;
+        let accel_distance = 0.5 * avg_accel * accel_time * accel_time;
+        
+        let decel_time = accel_time;
+        let decel_distance = accel_distance;
+        
         let cruise_distance = distance - accel_distance - decel_distance;
-        
         let cruise_time = if cruise_distance > 0.0 {
-            cruise_distance / cruise_velocity
+            cruise_distance / velocity
         } else {
             0.0
         };
         
-        accel_time + cruise_time + decel_time
+        (accel_time, cruise_time, decel_time)
+    }
+
+    pub fn get_next_segment(&mut self) -> Option<TrajectorySegment> {
+        self.motion_queue.pop_front()
+    }
+
+    pub fn clear_queue(&mut self) {
+        self.motion_queue.clear();
+    }
+
+    pub fn get_queue_length(&self) -> usize {
+        self.motion_queue.len()
     }
 }

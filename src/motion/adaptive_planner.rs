@@ -309,7 +309,7 @@ impl AdaptiveMotionPlanner {
         let optimized_params = self.optimizer.get_optimized_params();
         
         // Plan the move with optimized parameters
-        let mut block = self.core_planner.plan_move(
+        let block = self.core_planner.plan_move(
             [0.0, 0.0, 0.0, 0.0], // Would get current position
             shaped_target,
             adjusted_feedrate,
@@ -327,7 +327,7 @@ impl AdaptiveMotionPlanner {
         )?;
         
         // Apply final optimizations
-        block = self.apply_final_optimizations(block, &metrics).await?;
+        let _optimized_block = self.apply_final_optimizations(block, &metrics).await?;
         
         // In real implementation, this would queue the block
         tracing::info!("Planned adaptive move to [{:.3}, {:.3}, {:.3}, {:.3}] at {:.1}mm/s",
@@ -738,7 +738,7 @@ impl ErrorPredictor {
         
         // Output layer (single output for error prediction)
         let mut output = 0.0;
-        for (i, &hidden_val) in hidden.iter().enumerate() {
+        for (_, &hidden_val) in hidden.iter().enumerate() {
             output += hidden_val * 0.1; // Simplified output weights
         }
         

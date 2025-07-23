@@ -163,7 +163,7 @@ impl MotionController {
     /// Apply junction deviation optimization
     fn apply_junction_optimization(&self, target: &[f64; 4]) -> Result<(), Box<dyn std::error::Error>> {
         // Calculate unit vector for this move
-        let unit_vector = JunctionDeviation::calculate_unit_vector(&self.current_position, target);
+        let _unit_vector = JunctionDeviation::calculate_unit_vector(&self.current_position, target);
         
         // In a real implementation, this would optimize the motion queue
         tracing::debug!("Applying junction deviation optimization");

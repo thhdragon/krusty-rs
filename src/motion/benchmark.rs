@@ -75,6 +75,7 @@ mod benchmark {
                 max_accel: 5000.0,
                 max_z_velocity: 50.0,
                 max_z_accel: 200.0,
+                printer_name: None,
             },
             mcu: crate::config::McuConfig {
                 serial: "/dev/null".to_string(),

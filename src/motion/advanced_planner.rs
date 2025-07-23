@@ -486,7 +486,7 @@ impl AdvancedMotionPlanner {
     async fn generate_steps(
         &self,
         position: &[f64; 4],
-        block: &MotionBlock,
+        _block: &MotionBlock,
     ) -> Result<(), Box<dyn std::error::Error>> {
         // Convert Cartesian position to motor positions
         let cartesian = [position[0], position[1], position[2]];

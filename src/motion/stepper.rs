@@ -1,5 +1,4 @@
 // src/motion/stepper.rs - Fixed duplicate Clone implementation
-use std::collections::VecDeque;
 
 #[derive(Debug, Clone)]
 pub struct StepGenerator {
