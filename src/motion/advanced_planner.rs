@@ -3,7 +3,7 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use crate::printer::PrinterState;
-use crate::hardware::HardwareManager;
+use crate::hardware::{HardwareManager, TemperatureController};
 use crate::motion::kinematics::{Kinematics, KinematicsType, create_kinematics};
 use crate::motion::junction::JunctionDeviation;
 use crate::motion::shaper::ShaperConfig;

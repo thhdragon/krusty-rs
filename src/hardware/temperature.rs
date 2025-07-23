@@ -91,7 +91,7 @@ impl TemperatureController {
     }
 
     /// Get current status
-    pub fn get_status(&self) -> TemperatureStatus {
+    pub fn get_status(&mut self) -> TemperatureStatus {
         TemperatureStatus {
             current: self.current_temperature,
             target: self.target_temperature,

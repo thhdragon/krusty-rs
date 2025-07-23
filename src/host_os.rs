@@ -5,7 +5,7 @@ use crate::printer::Printer;
 use crate::config::Config;
 use crate::gcode::GCodeProcessor;
 use crate::motion::{MotionController, MotionConfig};
-use crate::hardware::HardwareManager;
+use crate::hardware::{HardwareManager, TemperatureController};
 use crate::web::WebInterface;
 use crate::file::FileManager;
 

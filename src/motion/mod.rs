@@ -18,11 +18,10 @@ pub use stepper::StepGenerator;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use crate::printer::PrinterState;
-use crate::hardware::HardwareManager;
+use crate::hardware::{HardwareManager, TemperatureController};
 use crate::config::Config;
 
 /// Main motion controller that orchestrates all motion operations
-#[derive(Clone)]
 pub struct MotionController {
     /// Shared printer state
     state: Arc<RwLock<PrinterState>>,
@@ -223,4 +222,17 @@ impl MotionController {
     }
 }
 
-// Remove the manual Clone implementation since we're using #[derive(Clone)]
+// Manual Clone implementation for MotionController
+impl Clone for MotionController {
+    fn clone(&self) -> Self {
+        Self {
+            state: self.state.clone(),
+            hardware_manager: self.hardware_manager.clone(),
+            planner: self.planner.clone(),
+            kinematics: self.kinematics.clone(),
+            junction_deviation: self.junction_deviation.clone(),
+            current_position: self.current_position,
+            step_generator: self.step_generator.clone(),
+        }
+    }
+}

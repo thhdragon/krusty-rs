@@ -4,7 +4,7 @@ use tokio::sync::{RwLock, broadcast};
 use crate::config::Config;
 use crate::gcode::GCodeProcessor;
 use crate::motion::MotionController;
-use crate::hardware::HardwareManager;
+use crate::hardware::{HardwareManager, TemperatureController};
 
 pub struct Printer {
     config: Config,

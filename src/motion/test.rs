@@ -5,7 +5,7 @@ mod tests {
     use std::sync::Arc;
     use tokio::sync::RwLock;
     use crate::printer::PrinterState;
-    use crate::hardware::HardwareManager;
+    use crate::hardware::{HardwareManager, TemperatureController};
     use crate::config::Config;
 
     #[tokio::test]

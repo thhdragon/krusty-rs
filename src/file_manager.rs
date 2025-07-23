@@ -45,7 +45,12 @@ impl FileManager {
 
     /// Read a G-code file as a string. Uses current_directory if path is empty or ".".
     pub async fn read_gcode_file(&self, path: &str) -> Result<String, FileManagerError> {
-        let use_path = if path.is_empty() || path == "." { &self.current_directory } else { path };
+        use std::path::Path;
+        let use_path = if path.is_empty() || path == "." {
+            self.current_directory.clone()
+        } else {
+            Path::new(&self.current_directory).join(path).to_string_lossy().to_string()
+        };
         tracing::info!("Reading G-code file: {}", use_path);
         let content = fs::read_to_string(use_path).await?;
         Ok(content)

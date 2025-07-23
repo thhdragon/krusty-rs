@@ -1,4 +1,10 @@
-// src/hardware.rs
+// src/hardware/mod.rs
+// Declare the submodules within the `hardware` module
+pub mod temperature; // This refers to src/hardware/temperature.rs
+
+// Re-export items you want easily accessible from the `hardware` module level
+pub use temperature::TemperatureController;
+
 use crate::config::Config;
 use tokio::io::{AsyncWriteExt, AsyncReadExt};
 use thiserror::Error;
@@ -11,7 +17,7 @@ pub enum HardwareError {
     Serial(#[from] tokio_serial::Error),
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
-    #[error("Not connected to hardware")] 
+    #[error("Not connected to hardware")]
     NotConnected,
     #[error("Timeout waiting for response")]
     Timeout,
@@ -22,7 +28,7 @@ pub enum HardwareError {
 #[derive(Debug)]
 pub struct HardwareManager {
     config: Config,
-    serial: Option<SerialStream>, // Just store the stream directly
+    serial: Option<SerialStream>,
 }
 
 impl HardwareManager {
@@ -107,7 +113,7 @@ impl HardwareManager {
     }
 }
 
-// Manual Clone implementation
+// Manual Clone implementation for HardwareManager
 impl Clone for HardwareManager {
     fn clone(&self) -> Self {
         Self {
