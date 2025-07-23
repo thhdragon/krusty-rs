@@ -1,11 +1,15 @@
-// src/main.rs - Fixed main function
+// src/main.rs - Fixed main with removed unused imports
 mod printer;
 mod gcode;
 mod motion;
 mod hardware;
 mod config;
+mod file_manager;
+// mod print_job; // Comment out for now since we haven't created this file
 
 use printer::Printer;
+use file_manager::FileManager;
+// use print_job::PrintManager; // Comment out unused import
 use tokio::signal;
 use std::env;
 
@@ -17,7 +21,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
     
     tracing::info!("Starting Krusty-RS 3D Printer OS");
-    // Remove the build time line or replace with:
     tracing::info!("Version: 0.1.0");
     
     // Get configuration file path
@@ -84,6 +87,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         // Small delay between commands
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    }
+    
+    // Test file management
+    let file_manager = FileManager::new();
+    match file_manager.list_files(".").await {
+        Ok(files) => {
+            tracing::info!("Found {} files in current directory", files.len());
+            for file in files.iter().take(5) {
+                tracing::debug!("  {} ({} bytes)", file.name, file.size);
+            }
+        }
+        Err(e) => tracing::warn!("Could not list files: {}", e),
     }
     
     tracing::info!("Printer OS is running. Press Ctrl+C to shutdown...");

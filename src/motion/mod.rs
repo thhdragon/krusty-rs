@@ -1,4 +1,4 @@
-// src/motion/mod.rs - Use the hardware_manager field
+// src/motion/mod.rs - Fixed motion controller
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use crate::printer::PrinterState;
@@ -110,8 +110,8 @@ impl MotionController {
         self.current_position
     }
     
-    // Helper method to send steps to hardware
-    async fn send_steps_to_hardware(&self, target: &[f64; 4]) -> Result<(), Box<dyn std::error::Error>> {
+    // Helper method to send steps to hardware - now takes mutable self
+    async fn send_steps_to_hardware(&mut self, target: &[f64; 4]) -> Result<(), Box<dyn std::error::Error>> {
         // Calculate steps needed (simplified)
         let dx = target[0] - self.current_position[0];
         let dy = target[1] - self.current_position[1];
@@ -139,10 +139,5 @@ impl MotionController {
         }
         
         Ok(())
-    }
-    
-    // Add method to access hardware manager
-    pub fn get_hardware_manager(&self) -> &HardwareManager {
-        &self.hardware_manager
     }
 }
