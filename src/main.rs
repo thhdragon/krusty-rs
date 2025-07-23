@@ -22,13 +22,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Get configuration file path
     let args: Vec<String> = env::args().collect();
     let config_path = if args.len() > 1 {
-        &args[1]
+        args[1].clone()
     } else {
-        "printer.toml"
+        // Default to `printer.toml` in the executable's directory or `./src` for development
+        let exe_path = env::current_exe()?;
+        let exe_dir = exe_path.parent().unwrap();
+        let dev_path = exe_dir.join("src/printer.toml");
+        if dev_path.exists() {
+            dev_path.to_str().unwrap().to_string()
+        } else {
+            exe_dir.join("printer.toml").to_str().unwrap().to_string()
+        }
     };
     
     // Load configuration
-    let config = config::load_config(config_path)?;
+    let config = config::load_config(&config_path)?;
     
     // Create and start printer
     let mut printer = Printer::new(config).await.map_err(|e| Box::<dyn std::error::Error>::from(e))?;

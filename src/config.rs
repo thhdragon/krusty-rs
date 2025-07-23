@@ -26,8 +26,20 @@ pub struct Config {
     pub steppers: HashMap<String, StepperConfig>,
 }
 
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            printer: PrinterConfig::default(),
+            mcu: McuConfig::default(),
+            extruder: ExtruderConfig::default(),
+            heater_bed: HeaterBedConfig::default(),
+            steppers: HashMap::new(),
+        }
+    }
+}
+
 /// Printer-level configuration.
-#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct PrinterConfig {
     #[serde(default = "default_kinematics")]
     pub kinematics: String,
@@ -41,16 +53,37 @@ pub struct PrinterConfig {
     pub max_z_accel: f64,
 }
 
+impl Default for PrinterConfig {
+    fn default() -> Self {
+        Self {
+            kinematics: default_kinematics(),
+            max_velocity: default_max_velocity(),
+            max_accel: default_max_accel(),
+            max_z_velocity: default_max_z_velocity(),
+            max_z_accel: default_max_z_accel(),
+        }
+    }
+}
+
 /// Microcontroller configuration.
-#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct McuConfig {
     pub serial: String,
     #[serde(default = "default_baud")]
     pub baud: u32,
 }
 
+impl Default for McuConfig {
+    fn default() -> Self {
+        Self {
+            serial: "".to_string(),
+            baud: default_baud(),
+        }
+    }
+}
+
 /// Extruder configuration.
-#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ExtruderConfig {
     pub step_pin: String,
     pub dir_pin: String,
@@ -67,8 +100,23 @@ pub struct ExtruderConfig {
     pub filament_diameter: f64,
 }
 
+impl Default for ExtruderConfig {
+    fn default() -> Self {
+        Self {
+            step_pin: "".to_string(),
+            dir_pin: "".to_string(),
+            enable_pin: "".to_string(),
+            rotation_distance: default_rotation_distance(),
+            gear_ratio: None,
+            microsteps: default_microsteps(),
+            nozzle_diameter: default_nozzle_diameter(),
+            filament_diameter: default_filament_diameter(),
+        }
+    }
+}
+
 /// Heated bed configuration.
-#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct HeaterBedConfig {
     pub heater_pin: String,
     pub sensor_type: String,
@@ -79,8 +127,20 @@ pub struct HeaterBedConfig {
     pub max_temp: f64,
 }
 
+impl Default for HeaterBedConfig {
+    fn default() -> Self {
+        Self {
+            heater_pin: "".to_string(),
+            sensor_type: "".to_string(),
+            sensor_pin: "".to_string(),
+            min_temp: default_min_temp(),
+            max_temp: default_max_temp(),
+        }
+    }
+}
+
 /// Stepper motor configuration.
-#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct StepperConfig {
     pub step_pin: String,
     pub dir_pin: String,
@@ -91,6 +151,19 @@ pub struct StepperConfig {
     pub microsteps: u32,
     #[serde(default = "default_full_steps_per_rotation")]
     pub full_steps_per_rotation: u32,
+}
+
+impl Default for StepperConfig {
+    fn default() -> Self {
+        Self {
+            step_pin: "".to_string(),
+            dir_pin: "".to_string(),
+            enable_pin: "".to_string(),
+            rotation_distance: default_rotation_distance(),
+            microsteps: default_microsteps(),
+            full_steps_per_rotation: default_full_steps_per_rotation(),
+        }
+    }
 }
 
 // Default value functions
@@ -134,16 +207,15 @@ mod tests {
 
     #[test]
     fn test_default_values() {
-        let printer = PrinterConfig::default();
-        assert_eq!(printer.kinematics, "cartesian");
-        assert_eq!(printer.max_velocity, 300.0);
-        assert_eq!(printer.max_accel, 3000.0);
-        assert_eq!(printer.max_z_velocity, 25.0);
-        assert_eq!(printer.max_z_accel, 100.0);
-        let extruder = ExtruderConfig::default();
-        assert_eq!(extruder.microsteps, 16);
-        assert_eq!(extruder.nozzle_diameter, 0.4);
-        assert_eq!(extruder.filament_diameter, 1.75);
+        let config = Config::default();
+        assert_eq!(config.printer.kinematics, "cartesian");
+        assert_eq!(config.printer.max_velocity, 300.0);
+        assert_eq!(config.printer.max_accel, 3000.0);
+        assert_eq!(config.printer.max_z_velocity, 25.0);
+        assert_eq!(config.printer.max_z_accel, 100.0);
+        assert_eq!(config.extruder.microsteps, 16);
+        assert_eq!(config.extruder.nozzle_diameter, 0.4);
+        assert_eq!(config.extruder.filament_diameter, 1.75);
     }
 
     #[test]

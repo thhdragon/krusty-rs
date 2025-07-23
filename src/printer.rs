@@ -36,6 +36,12 @@ impl PrinterState {
     }
 }
 
+impl Default for PrinterState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Printer {
     pub async fn new(config: Config) -> Result<Self, Box<dyn std::error::Error>> {
         let state = Arc::new(RwLock::new(PrinterState::new()));

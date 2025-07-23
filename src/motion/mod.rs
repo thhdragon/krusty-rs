@@ -19,6 +19,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use crate::printer::PrinterState;
 use crate::hardware::HardwareManager;
+use crate::config::Config;
 
 /// Main motion controller that orchestrates all motion operations
 #[derive(Clone)]
@@ -57,6 +58,15 @@ impl std::fmt::Debug for MotionController {
             .field("current_position", &self.current_position)
             .field("step_generator", &self.step_generator)
             .finish()
+    }
+}
+
+impl Default for MotionController {
+    fn default() -> Self {
+        let state = Arc::new(RwLock::new(PrinterState::new()));
+        let config = Config::default();
+        let hardware_manager = HardwareManager::new(config);
+        MotionController::new(state, hardware_manager)
     }
 }
 
