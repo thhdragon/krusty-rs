@@ -263,6 +263,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4a5f13b858c8d314ee3e8f639011f7ccefe71f97f96e50151fb991f267928e2c"
 
 [[package]]
+name = "krusty-rs"
+version = "0.1.0"
+dependencies = [
+ "rand",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-serial",
+ "tokio-test",
+ "toml",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "lazy_static"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -497,21 +512,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7e8af0dde094006011e6a740d4879319439489813bd0bcdc7d821beaeeff48ec"
 dependencies = [
  "bitflags 2.9.1",
-]
-
-[[package]]
-name = "rust-printer-os"
-version = "0.1.0"
-dependencies = [
- "rand",
- "serde",
- "serde_json",
- "tokio",
- "tokio-serial",
- "tokio-test",
- "toml",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]

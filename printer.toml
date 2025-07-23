@@ -1,0 +1,52 @@
+# printer.toml
+[printer]
+kinematics = "cartesian"
+max_velocity = 300.0
+max_accel = 3000.0
+max_z_velocity = 25.0
+max_z_accel = 100.0
+
+[mcu]
+serial = "/dev/ttyUSB0"
+baud = 250000
+
+[extruder]
+step_pin = "PA0"
+dir_pin = "PA1"
+enable_pin = "PA2"
+rotation_distance = 22.67895
+gear_ratio = [50.0, 10.0]
+microsteps = 16
+nozzle_diameter = 0.4
+filament_diameter = 1.75
+
+[heater_bed]
+heater_pin = "PA3"
+sensor_type = "EPCOS 100K B57560G104F"
+sensor_pin = "PA4"
+min_temp = 0.0
+max_temp = 130.0
+
+[steppers.stepper_x]
+step_pin = "PB0"
+dir_pin = "PB1"
+enable_pin = "PB2"
+rotation_distance = 40.0
+microsteps = 16
+full_steps_per_rotation = 200
+
+[steppers.stepper_y]
+step_pin = "PB3"
+dir_pin = "PB4"
+enable_pin = "PB5"
+rotation_distance = 40.0
+microsteps = 16
+full_steps_per_rotation = 200
+
+[steppers.stepper_z]
+step_pin = "PC0"
+dir_pin = "PC1"
+enable_pin = "PC2"
+rotation_distance = 8.0
+microsteps = 16
+full_steps_per_rotation = 200

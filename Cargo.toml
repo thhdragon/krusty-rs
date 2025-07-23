@@ -1,6 +1,6 @@
 # Cargo.toml
 [package]
-name = "rust-printer-os"
+name = "krusty-rs"
 version = "0.1.0"
 edition = "2024"
 
