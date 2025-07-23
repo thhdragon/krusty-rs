@@ -1,0 +1,29 @@
+# Cargo.toml
+[package]
+name = "rust-printer-os"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tokio = { version = "*", features = ["full"] }
+serde = { version = "*", features = ["derive"] }
+toml = "*"
+tracing = "*"
+tracing-subscriber = "*"
+tokio-serial = "*"
+rand = "*"
+
+[features]
+default = []
+benchmark = []
+web-interface = []
+
+[dev-dependencies]
+tokio-test = "0.4"
+
+serde_json = "1.0"
+
+
+[[bin]]
+name = "printer-host"
+path = "src/main.rs"
