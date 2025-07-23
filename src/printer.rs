@@ -63,17 +63,63 @@ impl Printer {
     
     pub async fn start(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         tracing::info!("Starting printer OS");
-        
         // Initialize hardware
         self.hardware_manager.initialize().await?;
-        
+        // Start the main processing loops
+        self.start_gcode_processing_loop().await?;
+        self.start_motion_control_loop().await?;
         // Mark as ready
         {
             let mut state = self.state.write().await;
             state.ready = true;
         }
-        
         tracing::info!("Printer OS ready");
+        Ok(())
+    }
+
+    async fn start_motion_control_loop(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let mut shutdown_rx = self.shutdown_tx.subscribe();
+        let mut motion_controller = self.motion_controller.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(tokio::time::Duration::from_micros(1000));
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            loop {
+                tokio::select! {
+                    _ = shutdown_rx.recv() => {
+                        tracing::info!("Motion control loop shutting down");
+                        break;
+                    }
+                    _ = interval.tick() => {
+                        if let Err(e) = motion_controller.update().await {
+                            tracing::error!("Motion controller update error: {}", e);
+                        }
+                    }
+                }
+            }
+        });
+        Ok(())
+    }
+
+    async fn start_gcode_processing_loop(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let mut shutdown_rx = self.shutdown_tx.subscribe();
+        let gcode_processor = self.gcode_processor.clone();
+        tokio::task::spawn_local(async move {
+            let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(10));
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            loop {
+                tokio::select! {
+                    _ = shutdown_rx.recv() => {
+                        tracing::info!("G-code processing loop shutting down");
+                        break;
+                    }
+                    _ = interval.tick() => {
+                        if let Err(e) = gcode_processor.process_next_command().await {
+                            tracing::error!("G-code processing error: {}", e);
+                        }
+                    }
+                }
+            }
+        });
         Ok(())
     }
     

@@ -36,7 +36,7 @@ impl JunctionDeviation {
 
     // Add the missing calculate_unit_vector function
     pub fn calculate_unit_vector(start: &[f64; 4], end: &[f64; 4]) -> [f64; 4] {
-        let mut delta = [
+        let delta = [
             end[0] - start[0],
             end[1] - start[1],
             end[2] - start[2],

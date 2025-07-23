@@ -4,6 +4,7 @@ use tokio::sync::RwLock;
 use crate::printer::PrinterState;
 use crate::motion::MotionController;
 use thiserror::Error;
+use std::collections::VecDeque;
 
 #[derive(Debug, Error)]
 pub enum GCodeError {
@@ -21,6 +22,7 @@ pub enum GCodeError {
 pub struct GCodeProcessor {
     state: Arc<RwLock<PrinterState>>,
     motion_controller: MotionController,
+    queue: Arc<tokio::sync::Mutex<VecDeque<String>>>,
 }
 
 impl GCodeProcessor {
@@ -32,7 +34,23 @@ impl GCodeProcessor {
         Self {
             state,
             motion_controller,
+            queue: Arc::new(tokio::sync::Mutex::new(VecDeque::new())),
         }
+    }
+
+    pub async fn enqueue_command(&self, command: String) {
+        let mut queue = self.queue.lock().await;
+        queue.push_back(command);
+    }
+
+    pub async fn process_next_command(&self) -> Result<(), GCodeError> {
+        let mut queue = self.queue.lock().await;
+        if let Some(command) = queue.pop_front() {
+            // We need a mutable reference to self for process_command, so clone for now
+            let mut temp = self.clone();
+            temp.process_command(&command).await?;
+        }
+        Ok(())
     }
 
     async fn handle_linear_move(&mut self, parts: &[&str]) -> Result<(), GCodeError> {
