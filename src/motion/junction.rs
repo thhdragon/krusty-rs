@@ -34,7 +34,20 @@ impl JunctionDeviation {
             [0.0, 0.0, 0.0, 0.0]
         }
     }
-}
 
-// Make sure to export it properly
-pub use self::JunctionDeviation;
+    /// Calculate the maximum junction speed based on the angle between two segments
+    pub fn calculate_junction_speed(&self, prev: &[f64; 4], next: &[f64; 4], acceleration: f64) -> f64 {
+        // Dot product for cosine of angle
+        let dot = prev.iter().zip(next.iter()).map(|(a, b)| a * b).sum::<f64>();
+        let cos_theta = dot.clamp(-1.0, 1.0);
+        // If the direction doesn't change, allow max speed
+        if cos_theta >= 0.9999 {
+            return f64::INFINITY;
+        }
+        // Calculate sin(theta/2)
+        let sin_half_theta = ((0.5 * (1.0 - cos_theta)).max(0.0)).sqrt();
+        // Standard formula for junction speed
+        let v = ((acceleration * self.deviation * sin_half_theta) / (1.0 - sin_half_theta)).sqrt();
+        if v.is_finite() { v } else { 0.0 }
+    }
+}

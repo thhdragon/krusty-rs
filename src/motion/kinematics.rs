@@ -9,7 +9,7 @@ pub enum KinematicsType {
 }
 
 /// Kinematics handler for different printer types
-pub trait Kinematics {
+pub trait Kinematics: KinematicsClone {
     /// Convert Cartesian coordinates to motor positions
     fn cartesian_to_motors(&self, cartesian: &[f64; 3]) -> Result<[f64; 4], Box<dyn std::error::Error>>;
     
@@ -20,7 +20,27 @@ pub trait Kinematics {
     fn is_valid_position(&self, cartesian: &[f64; 3]) -> bool;
 }
 
+pub trait KinematicsClone {
+    fn clone_box(&self) -> Box<dyn Kinematics>;
+}
+
+impl<T> KinematicsClone for T
+where
+    T: 'static + Kinematics + Clone,
+{
+    fn clone_box(&self) -> Box<dyn Kinematics> {
+        Box::new(self.clone())
+    }
+}
+
+impl Clone for Box<dyn Kinematics> {
+    fn clone(&self) -> Box<dyn Kinematics> {
+        self.clone_box()
+    }
+}
+
 /// Cartesian kinematics (most common 3D printer type)
+#[derive(Debug, Clone)]
 pub struct CartesianKinematics {
     /// Limits for each axis
     limits: [[f64; 2]; 3], // [min, max] for X, Y, Z
@@ -54,6 +74,7 @@ impl Kinematics for CartesianKinematics {
 }
 
 /// CoreXY kinematics
+#[derive(Debug, Clone)]
 pub struct CoreXYKinematics {
     limits: [[f64; 2]; 3],
 }

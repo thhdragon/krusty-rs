@@ -28,24 +28,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     
     // Load configuration
-    let config = match config::load_config(config_path) {
-        Ok(cfg) => cfg,
-        Err(e) => {
-            error!("Failed to load config: {}", e);
-            return Err(e);
-        }
-    };
+    let config = config::load_config(config_path)?;
     
     // Create and start printer
-    let mut printer = Printer::new(config).await?;
-    printer.start().await?;
+    let mut printer = Printer::new(config).await.map_err(|e| Box::<dyn std::error::Error>::from(e))?;
+    printer.start().await.map_err(|e| Box::<dyn std::error::Error>::from(e))?;
     
     info!("Printer OS is running. Press Ctrl+C to shutdown...");
     
     // Wait for shutdown signal
-    signal::ctrl_c().await?;
+    signal::ctrl_c().await.map_err(|e| Box::<dyn std::error::Error>::from(e))?;
     info!("\nShutting down...");
-    printer.shutdown().await?;
+    printer.shutdown().await.map_err(|e| Box::<dyn std::error::Error>::from(e))?;
     
     Ok(())
 }

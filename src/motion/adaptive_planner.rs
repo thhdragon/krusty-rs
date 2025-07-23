@@ -579,7 +579,7 @@ impl AdaptiveOptimizer {
         
         // Keep only recent history
         while self.convergence_tracker.improvement_history.len() > 20 {
-            self.convergence_tracker.pop_front();
+            self.convergence_tracker.improvement_history.pop_front();
         }
         
         // Calculate convergence score based on recent improvement
