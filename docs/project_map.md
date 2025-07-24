@@ -16,7 +16,6 @@ Krusty-rs is a modular, async Rust-based 3D printer host and motion control syst
   - **config.rs**: Configuration structs and parsing for printer, MCU, extruder, heater bed, etc.
   - **file_manager.rs**: File management utilities (G-code, configs, logs).
   - **host_os.rs**: OS abstraction for platform-specific operations.
-  - **integration_test.rs**: Integration test harness (see also `motion/test.rs`).
   - **main.rs**: Application entry point; sets up async runtime, loads config, starts web server and motion subsystems.
   - **print_job.rs**: Print job management (queueing, state, progress tracking).
   - **printer.rs**: High-level printer state, coordination, and control logic.
@@ -41,13 +40,23 @@ Krusty-rs is a modular, async Rust-based 3D printer host and motion control syst
     - **s_curve.rs**: S-curve motion profile generation.
     - **shaper.rs**: Input shaper logic for vibration reduction.
     - **stepper.rs**: Stepper motor control and abstraction.
-    - **test.rs**: Motion system unit and integration tests.
     - **trajectory.rs**: Trajectory generation and interpolation.
   - **web/**
     - **api.rs**: Axum-based HTTP API routes and handlers.
     - **mod.rs**: Web module root; declares submodules.
     - **models.rs**: API request/response types.
     - **printer_channel.rs**: Async channel for printer commands and status.
+- **tests/**
+  - **motion_controller.rs**: Integration tests for the motion controller (moved from `src/motion/test.rs`).
+  - **snap_crackle.rs**: Unit tests for G⁴ profile, Bézier blending, and input shaper logic (moved from `src/motion/planner/snap_crackle_tests.rs`).
+  - **adaptive_optimizer.rs**: Tests for adaptive optimizer (moved from `src/motion/planner/adaptive.rs`).
+  - **integration.rs**: Integration tests for the complete system (moved from `src/integration_test.rs`).
+  - **gcode_parser.rs**: Tests for the advanced G-code parser prototype (moved from `src/gcode/parser_tests.rs`).
+  - **gcode_mod.rs**: Tests for the G-code module (moved from `src/gcode/mod.rs`).
+  - **gcode_macros.rs**: Tests for G-code macros (moved from `src/gcode/macros.rs`).
+  - **file_manager.rs**: Tests for file manager (moved from `src/file_manager.rs`).
+  - **config.rs**: Tests for config (moved from `src/config.rs`).
+  - **mod.rs**: Test module root (can be used for shared test utilities).
 
 ---
 
@@ -58,7 +67,7 @@ Krusty-rs is a modular, async Rust-based 3D printer host and motion control syst
 - **Hardware Abstraction**: `hardware/mod.rs` and submodules abstract temperature, steppers, and other peripherals. Used by motion and printer modules.
 - **G-code Processing**: `gcode/` handles macro expansion and (potentially) parsing and execution.
 - **Web API**: `web/api.rs` exposes status and G-code execution endpoints via Axum. Uses async channels to communicate with the printer core.
-- **Testing**: `motion/test.rs` provides async unit and integration tests for the motion system, using mock hardware and configs. `planner/adaptive.rs` includes unit tests for adaptive parameter logic.
+- **Testing**: All unit and integration tests are now located in the `tests/` directory. Each major subsystem has its own test file, and all legacy test modules have been removed from `src/`.
 
 ---
 
@@ -236,9 +245,82 @@ All core adaptive motion planning features are implemented, fully integrated, an
   - Optimizer’s parameters are applied to the planner before planning each move using setter methods.
 - **Next Steps:**
   - [ ] Expand real-world and simulated validation for a wider range of printer setups and feedback scenarios
+    - **Best Practices and Plan:**
+      - Expand the simulation harness (`motion/benchmark.rs`) to support:
+        - Configurable printer and planner parameters via TOML/JSON (see Prunt3D `prunt_sim.toml` for reference)
+        - Injection of disturbances (oscillating substrate, random noise, feedback delay)
+        - Configurable feedback models (ideal, noisy, delayed)
+        - Output of quantitative metrics (path deviation, vibration, error rates) in CSV or similar format
+        - Scripts or tools for plotting and analyzing results
+      - Add test cases for a variety of printer setups and disturbance scenarios
+      - Integrate support for real-time sensor feedback (e.g., accelerometer, laser displacement) in the motion controller for hardware validation
+      - Benchmark adaptive (closed-loop) vs. open-loop (non-adaptive) planning in both simulation and hardware
+      - Automate result collection and reporting; document all scenarios, parameters, and results for reproducibility
+      - Reference: [Prunt3D Simulator](https://github.com/Prunt3D/prunt_simulator), [ScienceDirect: Closed-loop controlled conformal 3D printing](https://www.sciencedirect.com/science/article/pii/S1526612523000282)
   - [ ] Tune adaptation heuristics and thresholds for optimal print quality and stability
-  - [ ] Document best practices for enabling and configuring adaptive motion planning
+    - **Best Practices and Plan:**
+      - Begin with conservative adaptation and learning rates in `AdaptiveConfig` (see `planner/adaptive.rs`).
+      - Use the simulation harness to perform parameter sweeps for adaptation rate, learning rate, and thresholds.
+      - Monitor quantitative metrics (path deviation, vibration amplitude, print quality, error rates) during tuning.
+      - Gradually increase adaptation aggressiveness while checking for instability or overshoot.
+      - Validate tuned parameters on a variety of print scenarios (different geometries, speeds, and disturbances).
+      - Document tuned parameters and rationale for each hardware setup in the codebase and project docs.
+      - Reference: [Klipper Input Shaping Guide](https://www.klipper3d.org/Resonance_Compensation.html), [Prunt3D Features](https://prunt3d.com/docs/features/), [Machine learning-driven 3D printing: A review](https://www.sciencedirect.com/science/article/pii/S2352940724002518)
+  - [ ] Document best practices and usage for enabling and configuring adaptive motion planning
+    - **Best Practices and Usage:**
+      - To enable adaptive motion planning, set the motion controller mode to `Adaptive` in your config (see `planner/adaptive.rs`).
+      - Expose and document all key parameters in your config file (TOML):
+        - `adaptation_rate`: How quickly the optimizer responds to feedback (start low, increase as needed).
+        - `learning_rate`: Controls the magnitude of parameter updates (start with a small value).
+        - `buffer_size`: Number of recent feedback samples to average (larger = smoother, smaller = more responsive).
+        - `thresholds`: Limits for triggering adaptation (e.g., vibration, error, or deviation thresholds).
+      - Example TOML config:
+        ```toml
+        [motion.adaptive]
+        enabled = true
+        adaptation_rate = 0.05
+        learning_rate = 0.01
+        buffer_size = 10
+        vibration_threshold = 0.2
+        error_threshold = 0.05
+        ```
+      - Example Rust usage:
+        ```rust
+        let adaptive_config = AdaptiveConfig {
+            enabled: true,
+            adaptation_rate: 0.05,
+            learning_rate: 0.01,
+            buffer_size: 10,
+            vibration_threshold: 0.2,
+            error_threshold: 0.05,
+        };
+        let mut controller = MotionController::new();
+        controller.set_adaptive_config(adaptive_config);
+        ```
+      - Always validate config changes in simulation before applying to hardware.
+      - Document the rationale for chosen parameters and update as you tune for your hardware.
+      - Reference: [Prunt3D Features](https://prunt3d.com/docs/features/), [Klipper Input Shaping Guide](https://www.klipper3d.org/Resonance_Compensation.html), [ScienceDirect: Closed-loop controlled conformal 3D printing](https://www.sciencedirect.com/science/article/pii/S1526612523000282)
   - [ ] Add more integration tests and edge case coverage
+    - **Best Practices and Plan:**
+      - Expand integration tests to cover the full motion pipeline: config parsing, planner/controller interaction, feedback loops, and hardware abstraction.
+      - Add edge case tests for:
+        - Zero, negative, and extreme values for all motion parameters (acceleration, jerk, snap, crackle, etc.).
+        - Sudden or missing feedback (sensor spikes, lost/delayed feedback, simulated hardware faults).
+        - Pathological or malformed G-code (out-of-bounds moves, rapid reversals, invalid commands).
+        - Hardware faults (stepper/temperature sensor failure, communication errors).
+        - Realistic disturbance scenarios (oscillating/moving substrate, vibration, etc.).
+      - Use both simulation and hardware-in-the-loop tests where possible.
+      - Automate test result collection and reporting (CSV, logs, plots).
+      - **Test Scenarios Implemented (July 2025):**
+        - Integration tests in `tests/integration.rs` now cover:
+          - Zero, negative, and extreme values in `max_acceleration` and `max_jerk` arrays (planner does not panic, returns error or ok as appropriate).
+          - Simulated feedback faults at the controller level (robust to missing or extreme feedback, controller remains functional).
+        - All tests pass as of July 2025. See `tests/integration.rs` for details and future expansion.
+      - **Next:**
+        - Expand tests for malformed/pathological G-code and hardware faults.
+        - Add automation for test result collection and reporting (CSV/log/plot output).
+        - Continue to document all new scenarios and results here for reproducibility.
+        - Reference: [Prunt3D Features](https://prunt3d.com/docs/features/), [Klipper Input Shaping Guide](https://www.klipper3d.org/Resonance_Compensation.html), [ScienceDirect: Closed-loop controlled conformal 3D printing](https://www.sciencedirect.com/science/article/pii/S1526612523000282)
 
 ---
 
