@@ -165,4 +165,33 @@ impl MacroProcessor {
     }
 }
 
+#[async_trait::async_trait]
+impl crate::gcode::parser::MacroExpander for MacroProcessor {
+    async fn expand(&self, name: &str, _args: &str) -> Option<Vec<crate::gcode::parser::OwnedGCodeCommand>> {
+        let macros = self.macros.read().await;
+        if let Some(commands) = macros.get(name) {
+            // Parse each macro line into OwnedGCodeCommand
+            let mut expanded = Vec::new();
+            for line in commands {
+                let config = crate::gcode::parser::GCodeParserConfig {
+                    enable_comments: true,
+                    enable_checksums: true,
+                    enable_infix: true,
+                    enable_macros: true,
+                    enable_vendor_extensions: true,
+                };
+                let mut parser = crate::gcode::parser::GCodeParser::new(line, config);
+                while let Some(cmd_result) = parser.next_command() {
+                    if let Ok(cmd) = cmd_result {
+                        expanded.push(cmd.into());
+                    }
+                }
+            }
+            Some(expanded)
+        } else {
+            None
+        }
+    }
+}
+
 // All test code moved to tests/gcode_macros.rs

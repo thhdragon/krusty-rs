@@ -72,6 +72,12 @@ Implement robust G-code macro/streaming parsing and macro expansion. Work is foc
 Next: begin implementation of macro expansion and streaming parser (subtask 3.3).
 
 ### 2025-07-24
+**Streaming Parser Infrastructure Review:**
+- The codebase already contains an `AsyncGCodeParser` that implements `futures::Stream` for async streaming parsing, with macro expansion support via a `MacroExpander` trait.
+- Macro expansion is performed in the async parser, and expanded commands are queued and yielded before continuing with the source.
+- Next: verify and enhance async macro expansion integration, ensure error recovery and command injection match the design, and add/improve tests/examples for streaming parser with macro expansion.
+
+### 2025-07-24
 **Implementation Plan for Macro Expansion and Streaming Parser:**
 1. Refactor `GCodeParser` to implement `futures::Stream` for async streaming parsing.
 2. Ensure macro expansion is async and integrates with the stream (buffer expanded commands, yield before continuing source).
@@ -79,3 +85,11 @@ Next: begin implementation of macro expansion and streaming parser (subtask 3.3)
 4. Test with a mock macro source and print job integration.
 
 Subtask 3.3 is now In Progress.
+
+### 2025-07-24
+**Next Step:**
+- Add or enhance tests/examples for the streaming parser with macro expansion, focusing on:
+  - Nested macro expansion
+  - Error recovery (e.g., missing macro, syntax error)
+  - Command injection order
+- Confirm that expanded commands are always injected into the stream before continuing with the source.
