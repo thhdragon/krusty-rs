@@ -1,11 +1,9 @@
 // src/motion/planner/adaptive.rs
 
 // Import from the parent planner module and other necessary modules
-use super::{MotionSegment, MotionType}; // Assuming MotionSegment/MotionBlock and MotionType are in mod.rs
+use super::{MotionSegment, MotionType};
 use crate::motion::kinematics::KinematicsType;
 use crate::config::Config;
-// Assuming JunctionDeviation is fixed and available
-// use crate::motion::junction::JunctionDeviation; // Might need to adjust path or move it
 
 use std::collections::VecDeque;
 use std::sync::Arc;

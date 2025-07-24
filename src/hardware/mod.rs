@@ -3,13 +3,12 @@
 pub mod temperature; // This refers to src/hardware/temperature.rs
 
 // Re-export items you want easily accessible from the `hardware` module level
-pub use temperature::TemperatureController;
 
 use crate::config::Config;
-use tokio::io::{AsyncWriteExt, AsyncReadExt};
-use thiserror::Error;
-use tokio_serial::{SerialPortBuilderExt, SerialStream};
 use std::time::Duration;
+use thiserror::Error;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio_serial::{SerialPortBuilderExt, SerialStream};
 
 #[derive(Debug, Error)]
 pub enum HardwareError {
@@ -40,8 +39,10 @@ impl HardwareManager {
     }
 
     pub async fn connect(&mut self) -> Result<(), HardwareError> {
-        tracing::info!("Connecting to MCU: {} at {} baud", 
-                      self.config.mcu.serial, self.config.mcu.baud);
+        tracing::info!(
+            "Connecting to MCU: {} at {} baud",
+            self.config.mcu.serial, self.config.mcu.baud
+        );
         let port = tokio_serial::new(&self.config.mcu.serial, self.config.mcu.baud)
             .timeout(Duration::from_millis(100))
             .open_native_async()?;
@@ -82,7 +83,12 @@ impl HardwareManager {
             }
         }
         tokio::time::sleep(Duration::from_millis(1000)).await;
-        let steppers: Vec<_> = self.config.steppers.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+        let steppers: Vec<_> = self
+            .config
+            .steppers
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
         for (name, stepper) in steppers {
             let cmd = format!(
                 "config_stepper name={} step_pin={} dir_pin={} enable_pin={} microsteps={}",

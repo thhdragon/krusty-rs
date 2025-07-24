@@ -7,7 +7,7 @@ use crate::gcode::GCodeProcessor;
 use crate::motion::{MotionController, MotionConfig};
 use crate::hardware::{HardwareManager, TemperatureController};
 use crate::web::WebInterface;
-use crate::file::FileManager;
+use crate::file_manager::FileManager;
 
 /// Complete 3D Printer Host OS
 pub struct PrinterHostOS {

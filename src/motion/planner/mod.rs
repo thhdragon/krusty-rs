@@ -1,10 +1,21 @@
 // src/motion/planner/mod.rs
 
 use std::collections::VecDeque;
-use crate::config::Config; // Assuming Config is needed for new_from_config
+use crate::config::Config;
 use crate::motion::kinematics::{Kinematics, create_kinematics};
 use crate::motion::junction::JunctionDeviation;
 use crate::motion::kinematics::KinematicsType;
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum MotionError {
+    #[error("Junction deviation error: {0}")]
+    JunctionDeviation(String),
+    #[error("Kinematics error: {0}")]
+    Kinematics(String),
+    #[error("Other: {0}")]
+    Other(String),
+}
 
 // Re-export shared types if they were defined here or move them here.
 // For now, assuming MotionType and core structs are defined here.
@@ -134,12 +145,11 @@ impl MotionPlanner {
         target: [f64; 4],
         feedrate: f64,
         motion_type: MotionType,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), MotionError> {
         let distance = self.calculate_distance(&self.current_position, &target);
         if distance < self.config.minimum_step_distance {
             return Ok(());
         }
-        // Calculate acceleration-limited feedrate
         let limited_feedrate = self.limit_feedrate_by_acceleration(&target, feedrate);
         let mut segment = MotionSegment {
             target,
@@ -152,11 +162,9 @@ impl MotionPlanner {
             exit_speed: 0.0,
             motion_type,
         };
-        // Apply junction deviation optimization
         self.apply_junction_deviation(&mut segment)?;
         self.motion_queue.push_back(segment);
         self.current_position = target;
-        // Trigger replanning when queue has enough moves
         if self.motion_queue.len() >= self.config.lookahead_buffer_size / 2 {
             self.replan_queue().await?;
         }
@@ -185,7 +193,7 @@ impl MotionPlanner {
     }
 
     /// Apply junction deviation optimization
-    fn apply_junction_deviation(&self, segment: &mut MotionSegment) -> Result<(), Box<dyn std::error::Error>> {
+    fn apply_junction_deviation(&self, segment: &mut MotionSegment) -> Result<(), MotionError> {
         // Calculate unit vector for this move
         let unit_vector = self.calculate_unit_vector(&self.current_position, &segment.target);
         // If there's a previous segment, calculate junction speed
@@ -203,7 +211,7 @@ impl MotionPlanner {
     }
 
     /// Replan motion queue for optimal performance
-    async fn replan_queue(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    async fn replan_queue(&mut self) -> Result<(), MotionError> {
         let queue_len = self.motion_queue.len();
         if queue_len < 2 {
             return Ok(());
@@ -225,7 +233,7 @@ impl MotionPlanner {
     }
 
     /// Forward pass through motion segments
-    fn forward_pass(&mut self, segments: &mut [MotionSegment]) -> Result<(), Box<dyn std::error::Error>> {
+    fn forward_pass(&mut self, segments: &mut [MotionSegment]) -> Result<(), MotionError> {
         let mut previous_unit_vector = None;
         for i in 0..segments.len() {
             // Calculate unit vector for this move
@@ -255,7 +263,7 @@ impl MotionPlanner {
     }
 
     /// Backward pass through motion segments
-    fn backward_pass(&mut self, segments: &mut [MotionSegment]) -> Result<(), Box<dyn std::error::Error>> {
+    fn backward_pass(&mut self, segments: &mut [MotionSegment]) -> Result<(), MotionError> {
         for i in (0..segments.len()).rev() {
             let exit_speed = if i == segments.len() - 1 {
                 0.0 // Last segment stops
@@ -276,7 +284,7 @@ impl MotionPlanner {
     }
 
     /// Recalculate segment durations with optimized speeds
-    fn recalculate_durations(&mut self, segments: &mut [MotionSegment]) -> Result<(), Box<dyn std::error::Error>> {
+    fn recalculate_durations(&mut self, segments: &mut [MotionSegment]) -> Result<(), MotionError> {
         for segment in segments {
             // For trapezoidal profile: t = (v_end - v_start + sqrt((v_end - v_start)² + 2*a*d)) / a
             let delta_v = segment.exit_speed - segment.entry_speed;
@@ -294,7 +302,7 @@ impl MotionPlanner {
 
     /// Calculate unit vector between two positions
     fn calculate_unit_vector(&self, start: &[f64; 4], end: &[f64; 4]) -> [f64; 4] {
-        let mut delta = [
+        let delta = [
             end[0] - start[0],
             end[1] - start[1],
             end[2] - start[2],
@@ -340,7 +348,7 @@ impl MotionPlanner {
     }
 
     /// Main update function - called at high frequency
-    pub async fn update(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn update(&mut self) -> Result<(), MotionError> {
         let now = std::time::Instant::now();
         let dt = (now - self.planner_state.last_update).as_secs_f64();
         self.planner_state.last_update = now;
@@ -396,10 +404,11 @@ impl MotionPlanner {
         &self,
         position: &[f64; 4],
         segment: &MotionSegment,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), MotionError> {
         // Convert Cartesian position to motor positions
         let cartesian = [position[0], position[1], position[2]];
-        let motor_positions = self.kinematics.cartesian_to_motors(&cartesian)?;
+        let motor_positions = self.kinematics.cartesian_to_motors(&cartesian)
+            .map_err(|e| MotionError::Other(e.to_string()))?;
         // In real implementation, this would:
         // 1. Convert motor positions to step counts
         // 2. Apply input shaping if configured

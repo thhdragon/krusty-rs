@@ -7,6 +7,17 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use crate::printer::Printer;
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum WebError {
+    #[error("Axum error: {0}")]
+    Axum(#[from] axum::Error),
+    #[error("Printer error: {0}")]
+    Printer(#[from] crate::printer::PrinterError),
+    #[error("Other: {0}")]
+    Other(String),
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PositionRequest {
@@ -39,7 +50,7 @@ impl WebServer {
         Self { printer }
     }
 
-    pub async fn start(&self, port: u16) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn start(&self, port: u16) -> Result<(), WebError> {
         let app = Router::new()
             .route("/", get(root))
             .route("/status", get(get_status))

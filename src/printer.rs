@@ -1,10 +1,24 @@
 // src/printer.rs - Use all fields properly
 use std::sync::Arc;
 use tokio::sync::{RwLock, broadcast};
+use thiserror::Error;
+
 use crate::config::Config;
 use crate::gcode::GCodeProcessor;
 use crate::motion::MotionController;
-use crate::hardware::{HardwareManager, TemperatureController};
+use crate::hardware::HardwareManager;
+
+#[derive(Debug, Error)]
+pub enum PrinterError {
+    #[error("Hardware error: {0}")]
+    Hardware(#[from] crate::hardware::HardwareError),
+    #[error("Motion error: {0}")]
+    Motion(#[from] crate::motion::MotionError),
+    #[error("GCode error: {0}")]
+    GCode(#[from] crate::gcode::GCodeError),
+    #[error("Other: {0}")]
+    Other(String),
+}
 
 pub struct Printer {
     config: Config,
@@ -43,14 +57,12 @@ impl Default for PrinterState {
 }
 
 impl Printer {
-    pub async fn new(config: Config) -> Result<Self, Box<dyn std::error::Error>> {
+    pub async fn new(config: Config) -> Result<Self, PrinterError> {
         let state = Arc::new(RwLock::new(PrinterState::new()));
         let (shutdown_tx, _) = broadcast::channel(1);
-        
         let hardware_manager = HardwareManager::new(config.clone());
         let motion_controller = Arc::new(RwLock::new(MotionController::new(state.clone(), hardware_manager.clone(), &config)));
         let gcode_processor = GCodeProcessor::new(state.clone(), motion_controller.clone());
-        
         Ok(Self {
             config,
             state,
@@ -60,15 +72,11 @@ impl Printer {
             shutdown_tx,
         })
     }
-    
-    pub async fn start(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn start(&mut self) -> Result<(), PrinterError> {
         tracing::info!("Starting printer OS");
-        // Initialize hardware
         self.hardware_manager.initialize().await?;
-        // Start the main processing loops
         self.start_gcode_processing_loop().await?;
         self.start_motion_control_loop().await?;
-        // Mark as ready
         {
             let mut state = self.state.write().await;
             state.ready = true;
@@ -76,8 +84,7 @@ impl Printer {
         tracing::info!("Printer OS ready");
         Ok(())
     }
-
-    async fn start_motion_control_loop(&self) -> Result<(), Box<dyn std::error::Error>> {
+    async fn start_motion_control_loop(&self) -> Result<(), PrinterError> {
         let mut shutdown_rx = self.shutdown_tx.subscribe();
         let motion_controller = self.motion_controller.clone();
         tokio::task::spawn_local(async move {
@@ -100,8 +107,7 @@ impl Printer {
         });
         Ok(())
     }
-
-    async fn start_gcode_processing_loop(&self) -> Result<(), Box<dyn std::error::Error>> {
+    async fn start_gcode_processing_loop(&self) -> Result<(), PrinterError> {
         let mut shutdown_rx = self.shutdown_tx.subscribe();
         let gcode_processor = self.gcode_processor.clone();
         tokio::task::spawn_local(async move {
@@ -123,28 +129,23 @@ impl Printer {
         });
         Ok(())
     }
-    
-    pub async fn shutdown(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn shutdown(&mut self) -> Result<(), PrinterError> {
         tracing::info!("Shutting down printer OS");
         let _ = self.shutdown_tx.send(());
         self.hardware_manager.shutdown().await?;
         Ok(())
     }
-    
-    pub async fn process_gcode(&mut self, gcode: &str) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn process_gcode(&mut self, gcode: &str) -> Result<(), PrinterError> {
         self.gcode_processor.process_command(gcode).await?;
         Ok(())
     }
-    
     // Add methods to use the fields
     pub fn get_config(&self) -> &Config {
         &self.config
     }
-    
     pub async fn get_state(&self) -> PrinterState {
         self.state.read().await.clone()
     }
-    
     pub fn get_motion_controller(&self) -> Arc<RwLock<MotionController>> {
         self.motion_controller.clone()
     }

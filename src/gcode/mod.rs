@@ -1,10 +1,11 @@
 // src/gcode.rs - Add Debug to MotionController
-use std::sync::Arc;
-use tokio::sync::RwLock;
-use crate::printer::PrinterState;
-use crate::motion::MotionController;
-use thiserror::Error;
 use std::collections::VecDeque;
+use std::sync::Arc;
+use thiserror::Error;
+use tokio::sync::RwLock;
+
+use crate::motion::MotionController;
+use crate::printer::PrinterState;
 
 #[derive(Debug, Error)]
 pub enum GCodeError {
@@ -60,16 +61,22 @@ impl GCodeProcessor {
         let mut z = None;
         let mut e = None;
         let mut f = None;
-        
+
         for part in parts.iter().skip(1) {
             if part.len() < 2 {
-                tracing::warn!("Parameter '{}' is missing a value and will be ignored", part);
+                tracing::warn!(
+                    "Parameter '{}' is missing a value and will be ignored",
+                    part
+                );
                 continue;
             }
             let param = part.chars().next().unwrap_or(' ').to_ascii_uppercase();
             let value_str = &part[1..];
             if value_str.is_empty() {
-                tracing::warn!("Parameter '{}' is missing a value and will be ignored", part);
+                tracing::warn!(
+                    "Parameter '{}' is missing a value and will be ignored",
+                    part
+                );
                 continue;
             }
             let value_res = value_str.parse::<f64>();
@@ -85,18 +92,18 @@ impl GCodeProcessor {
                 Err(e) => tracing::warn!("Failed to parse parameter '{}': {}", part, e),
             }
         }
-        
+
         // Get current position for relative moves (simplified - assuming absolute)
         let current_pos = self.get_current_position().await;
         let target_x = x.unwrap_or(current_pos[0]);
         let target_y = y.unwrap_or(current_pos[1]);
         let target_z = z.unwrap_or(current_pos[2]);
-        
+
         let mut mc = self.motion_controller.write().await;
         mc.queue_linear_move([target_x, target_y, target_z], f, e)
             .await
             .map_err(|e| GCodeError::MotionError(e.to_string()))?;
-        
+
         Ok(())
     }
 
@@ -111,16 +118,22 @@ impl GCodeProcessor {
         let mut y = None;
         let mut z = None;
         let mut e = None;
-        
+
         for part in parts.iter().skip(1) {
             if part.len() < 2 {
-                tracing::warn!("Parameter '{}' is missing a value and will be ignored", part);
+                tracing::warn!(
+                    "Parameter '{}' is missing a value and will be ignored",
+                    part
+                );
                 continue;
             }
             let param = part.chars().next().unwrap_or(' ').to_ascii_uppercase();
             let value_str = &part[1..];
             if value_str.is_empty() {
-                tracing::warn!("Parameter '{}' is missing a value and will be ignored", part);
+                tracing::warn!(
+                    "Parameter '{}' is missing a value and will be ignored",
+                    part
+                );
                 continue;
             }
             let value_res = value_str.parse::<f64>();
@@ -135,7 +148,13 @@ impl GCodeProcessor {
                 Err(e) => tracing::warn!("Failed to parse parameter '{}': {}", part, e),
             }
         }
-        tracing::info!("Setting position - X:{:?} Y:{:?} Z:{:?} E:{:?}", x, y, z, e);
+        tracing::info!(
+            "Setting position - X:{:?} Y:{:?} Z:{:?} E:{:?}",
+            x,
+            y,
+            z,
+            e
+        );
         Ok(())
     }
 
@@ -146,7 +165,10 @@ impl GCodeProcessor {
             }
             let value_str = &part[1..];
             if value_str.is_empty() {
-                tracing::warn!("Parameter '{}' is missing a value and will be ignored", part);
+                tracing::warn!(
+                    "Parameter '{}' is missing a value and will be ignored",
+                    part
+                );
                 continue;
             }
             match value_str.parse::<f64>() {
@@ -172,7 +194,10 @@ impl GCodeProcessor {
             }
             let value_str = &part[1..];
             if value_str.is_empty() {
-                tracing::warn!("Parameter '{}' is missing a value and will be ignored", part);
+                tracing::warn!(
+                    "Parameter '{}' is missing a value and will be ignored",
+                    part
+                );
                 continue;
             }
             match value_str.parse::<f64>() {
@@ -199,7 +224,10 @@ impl GCodeProcessor {
             }
             let value_str = &part[1..];
             if value_str.is_empty() {
-                tracing::warn!("Parameter '{}' is missing a value and will be ignored", part);
+                tracing::warn!(
+                    "Parameter '{}' is missing a value and will be ignored",
+                    part
+                );
                 continue;
             }
             match value_str.parse::<i32>() {
@@ -256,7 +284,7 @@ impl GCodeProcessor {
         let pos4 = mc.get_current_position();
         [pos4[0], pos4[1], pos4[2]]
     }
-    
+
     /// Get a copy of the current printer state.
     pub async fn get_state(&self) -> PrinterState {
         self.state.read().await.clone()
@@ -266,14 +294,13 @@ impl GCodeProcessor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::printer::PrinterState;
     use crate::motion::MotionController;
+    use crate::printer::PrinterState;
     use std::sync::Arc;
     use tokio::sync::RwLock;
 
-    fn dummy_motion_controller() -> MotionController {
-        // You may need to adjust this to match your MotionController constructor
-        MotionController::default()
+    fn dummy_motion_controller() -> Arc<RwLock<MotionController>> {
+        Arc::new(RwLock::new(MotionController::default()))
     }
 
     #[tokio::test]

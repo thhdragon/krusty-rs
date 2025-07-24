@@ -1,7 +1,7 @@
 // src/motion/planner/snap_crackle.rs
 
 // Import necessary types from the parent module
-use super::{MotionSegment, MotionType}; // Adjust based on what's actually shared
+use super::{MotionSegment, MotionType};
 use crate::motion::kinematics::KinematicsType;
 use crate::config::Config;
 

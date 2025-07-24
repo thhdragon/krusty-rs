@@ -1,15 +1,17 @@
 // src/motion/mod.rs - Activate advanced features
+use crate::config::Config;
+use crate::hardware::HardwareManager;
+use crate::motion::planner::{MotionConfig, MotionPlanner, MotionType};
+use crate::printer::PrinterState;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use crate::printer::PrinterState;
-use crate::hardware::HardwareManager;
-use crate::motion::planner::{MotionPlanner, MotionConfig, MotionType};
-use crate::motion::kinematics::create_kinematics;
-use crate::config::Config;
 
-mod planner;
-mod kinematics;
 mod junction;
+mod kinematics;
+mod planner;
+pub mod controller;
+
+pub use planner::MotionError;
 
 #[derive(Debug)]
 pub struct MotionController {

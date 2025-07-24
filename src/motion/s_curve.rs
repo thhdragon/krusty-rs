@@ -15,6 +15,16 @@ pub struct SCurveGenerator {
     max_jerk: f64,
 }
 
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum SCurveError {
+    #[error("Invalid parameters: {0}")]
+    InvalidParameters(String),
+    #[error("Other: {0}")]
+    Other(String),
+}
+
 impl SCurveGenerator {
     pub fn new(max_velocity: f64, max_acceleration: f64, max_jerk: f64) -> Self {
         Self {
@@ -31,7 +41,7 @@ impl SCurveGenerator {
         start_velocity: f64,
         end_velocity: f64,
         cruise_velocity: f64,
-    ) -> Result<Vec<MotionPoint>, Box<dyn std::error::Error>> {
+    ) -> Result<Vec<MotionPoint>, SCurveError> {
         // S-curve consists of 7 phases:
         // 1. Jerk increase (acceleration increases linearly)
         // 2. Constant acceleration

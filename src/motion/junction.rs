@@ -1,5 +1,3 @@
-// src/motion/junction.rs
-
 #[derive(Debug, Clone)]
 pub struct JunctionDeviation {
     pub deviation: f64,

@@ -1,6 +1,8 @@
 // src/file_manager.rs - Fixed file manager
-use tokio::fs;
+use std::path::Path;
+use std::time::SystemTime;
 use thiserror::Error;
+use tokio::fs;
 
 #[derive(Debug, Error)]
 pub enum FileManagerError {
@@ -22,7 +24,7 @@ pub struct FileInfo {
     pub name: String,
     pub size: u64,
     pub is_directory: bool,
-    pub modified: std::time::SystemTime,
+    pub modified: SystemTime,
 }
 
 impl FileManager {
@@ -45,7 +47,6 @@ impl FileManager {
 
     /// Read a G-code file as a string. Uses current_directory if path is empty or ".".
     pub async fn read_gcode_file(&self, path: &str) -> Result<String, FileManagerError> {
-        use std::path::Path;
         let use_path = if path.is_empty() || path == "." {
             self.current_directory.clone()
         } else {
@@ -79,7 +80,7 @@ impl FileManager {
                         Ok(m) => m,
                         Err(e) => {
                             tracing::warn!("Failed to get modified time for '{}': {}", name_str, e);
-                            std::time::SystemTime::UNIX_EPOCH
+                            SystemTime::UNIX_EPOCH
                         }
                     };
                     files.push(FileInfo {

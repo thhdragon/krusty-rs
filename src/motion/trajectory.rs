@@ -1,5 +1,6 @@
 // src/motion/trajectory.rs - Add trajectory generation
 use std::collections::VecDeque;
+use thiserror::Error;
 
 /// Motion trajectory generator with proper acceleration control
 #[derive(Debug, Clone)]
@@ -40,6 +41,14 @@ pub enum MotionType {
     Extruder,
 }
 
+#[derive(Debug, Error)]
+pub enum TrajectoryError {
+    #[error("Invalid trajectory parameters: {0}")]
+    InvalidParameters(String),
+    #[error("Other: {0}")]
+    Other(String),
+}
+
 impl TrajectoryGenerator {
     pub fn new(config: TrajectoryConfig) -> Self {
         Self {
@@ -55,7 +64,7 @@ impl TrajectoryGenerator {
         target: [f64; 4],
         feedrate: f64,
         motion_type: MotionType,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), TrajectoryError> {
         let distance = self.calculate_distance(&self.current_position, &target);
         
         if distance < 0.001 {
