@@ -72,14 +72,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
                     let state = printer.get_state().await;
                     // Map to API response type
                     let response = web::models::PrinterStatusResponse {
-                        status: if state.ready { "Idle".to_string() } else { "Not Ready".to_string() },
-                        position: (
-                            state.position[0] as f32,
-                            state.position[1] as f32,
-                            state.position[2] as f32
-                        ),
-                        hotend_temp: state.temperature as f32,
-                        target_hotend_temp: state.bed_temperature as f32,
+                        state: if state.ready { "Idle".to_string() } else { "Not Ready".to_string() },
+                        job: None, // TODO: Populate with real job info if available
+                        printer: web::models::PrinterDetails {
+                            position: (
+                                state.position[0] as f32,
+                                state.position[1] as f32,
+                                state.position[2] as f32
+                            ),
+                            hotend_temp: state.temperature as f32,
+                            target_hotend_temp: state.bed_temperature as f32,
+                        },
                     };
                     let _ = respond_to.send(response);
                 }

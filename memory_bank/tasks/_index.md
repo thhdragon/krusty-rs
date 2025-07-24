@@ -1,7 +1,8 @@
 # Tasks Index
 
 
-- [TASK004] Web API endpoints for pause, resume, cancel, status - Status endpoint and integration complete; authentication and testing next ([details](TASK004-web-api-endpoints.md))
+## Completed
+- [TASK004] Web API endpoints for pause, resume, cancel, status, and authentication - All endpoints implemented, tested, and validated; robust, secure, and compatible ([details](TASK004-web-api-endpoints.md))
 - [TASK005] Modularize hardware interfaces and integrate with main workflow
 - [TASK006] Host OS abstraction: serial protocol, time sync, event system
 - [TASK007] Refactor error handling to use robust enums and context

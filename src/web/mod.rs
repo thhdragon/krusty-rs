@@ -2,8 +2,12 @@
 //! This file declares the other files in this directory as sub-modules.
 
 pub mod api;
+pub mod auth;
 pub mod models;
 pub mod printer_channel;
+pub mod token_blacklist;
+pub mod rate_limiter;
+pub mod login_rate_limit;
 
 use std::sync::Arc;
 use tokio::sync::RwLock;
