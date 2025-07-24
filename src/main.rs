@@ -5,10 +5,14 @@ mod motion;
 mod hardware;
 mod config;
 mod file_manager;
+mod web;
 
 use printer::Printer;
 use std::env;
-use tokio::signal;
+use std::sync::{Arc, Mutex};
+use web::printer_channel::{PrinterRequest};
+use tokio::sync::mpsc;
+use tokio::task::LocalSet;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
@@ -46,61 +50,54 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
     tracing::info!("Max velocity: {} mm/s", config.printer.max_velocity);
     tracing::info!("Max acceleration: {} mm/s²", config.printer.max_accel);
     
-    // Create and start printer
-    let mut printer = match Printer::new(config).await {
+    // Create the main Printer object.
+    let mut printer = match Printer::new(config).await { // The `mut` is needed for the printer task loop
         Ok(p) => p,
         Err(e) => {
             tracing::error!("Failed to initialize printer: {}", e);
             return Err(Box::new(e) as Box<dyn std::error::Error + Send + Sync + 'static>);
         }
     };
-    if let Err(e) = printer.start().await {
-        tracing::error!("Failed to start printer: {}", e);
-        return Err(Box::new(e) as Box<dyn std::error::Error + Send + Sync + 'static>);
-    }
-    
-    // Test different motion modes
-    tracing::info!("Testing different motion modes...");
-    
-    // Test basic motion
-    test_motion_modes(&mut printer).await?;
-    
-    tracing::info!("Motion mode testing complete");
-    tracing::info!("Printer OS is running. Press Ctrl+C to shutdown...");
-    
-    // Wait for shutdown signal
-    match signal::ctrl_c().await {
-        Ok(()) => tracing::info!("\nShutdown signal received..."),
-        Err(e) => tracing::warn!("Failed to wait for shutdown signal: {}", e),
-    }
-    
-    // Graceful shutdown
-    if let Err(e) = printer.shutdown().await {
-        tracing::error!("Error during shutdown: {}", e);
-        return Err(Box::new(e) as Box<dyn std::error::Error + Send + Sync + 'static>);
-    }
-    
-    Ok(())
-}
 
-async fn test_motion_modes(printer: &mut printer::Printer) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
-    let test_commands = vec![
-        "G28 ; Home all axes",
-        "G1 X100 Y100 Z10 F3000 ; Move to position",
-        "G1 E10 F200 ; Extrude 10mm",
-        "M104 S200 ; Set hotend temperature",
-        "M140 S60 ; Set bed temperature",
-        "M106 S255 ; Fan on full speed",
-        "M117 Testing Krusty-RS ; Display message",
-    ];
-    
-    for command in test_commands {
-        match printer.process_gcode(command).await {
-            Ok(()) => tracing::debug!("Processed: {}", command.split(';').next().unwrap_or(command).trim()),
-            Err(e) => tracing::warn!("Failed to process '{}': {}", command, e),
+    // Set up a channel for communication between Axum handlers and the printer task.
+    let (printer_tx, mut printer_rx) = mpsc::channel::<PrinterRequest>(16);
+
+    // Create a LocalSet for !Send tasks.
+    let local = LocalSet::new();
+
+    // Spawn the background printer task on the local set.
+    local.spawn_local(async move {
+        while let Some(request) = printer_rx.recv().await {
+            match request {
+                PrinterRequest::GetStatus { respond_to } => {
+                    let state = printer.get_state().await;
+                    // Map to API response type
+                    let response = web::models::PrinterStatusResponse {
+                        status: if state.ready { "Idle".to_string() } else { "Not Ready".to_string() },
+                        position: (state.position[0], state.position[1], state.position[2]),
+                        hotend_temp: state.hotend_temp,
+                        target_hotend_temp: state.target_hotend_temp,
+                    };
+                    let _ = respond_to.send(response);
+                }
+                PrinterRequest::ExecuteGcode { command, respond_to } => {
+                    let result = printer.process_gcode(&command).await.map_err(|e| e.to_string());
+                    let _ = respond_to.send(result);
+                }
+            }
         }
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-    }
-    
+    });
+
+    // Create the Axum router, passing it the channel sender.
+    let app = web::api::create_router(printer_tx);
+
+    // Start the web server and the local set.
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
+    tracing::info!("Web API listening on http://{}", listener.local_addr()?);
+    local.spawn_local(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    local.await;
+
     Ok(())
 }
