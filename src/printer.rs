@@ -63,6 +63,11 @@ impl Printer {
         let hardware_manager = HardwareManager::new(config.clone());
         let motion_controller = Arc::new(RwLock::new(MotionController::new(state.clone(), hardware_manager.clone(), &config)));
         let gcode_processor = GCodeProcessor::new(state.clone(), motion_controller.clone());
+
+        if config.printer.printer_name.as_deref().unwrap_or("").is_empty() {
+            return Err(PrinterError::Other("Printer name cannot be empty".to_string()));
+        }
+
         Ok(Self {
             config,
             state,

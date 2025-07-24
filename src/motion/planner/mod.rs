@@ -414,9 +414,10 @@ impl MotionPlanner {
         // 2. Apply input shaping if configured
         // 3. Send step commands to MCU
         tracing::trace!(
-            "Position: [{:.3}, {:.3}, {:.3}, {:.3}] Motors: [{:.3}, {:.3}, {:.3}, {:.3}]",
+            "Position: [{:.3}, {:.3}, {:.3}, {:.3}] Motors: [{:.3}, {:.3}, {:.3}, {:.3}] Segment: {:?}",
             position[0], position[1], position[2], position[3],
-            motor_positions[0], motor_positions[1], motor_positions[2], motor_positions[3]
+            motor_positions[0], motor_positions[1], motor_positions[2], motor_positions[3],
+            segment
         );
         Ok(())
     }
