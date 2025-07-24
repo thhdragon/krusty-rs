@@ -16,4 +16,16 @@ pub enum PrinterRequest {
         command: String,
         respond_to: oneshot::Sender<Result<(), String>>,
     },
+    /// Pause the current print job.
+    PauseJob {
+        respond_to: oneshot::Sender<Result<(), String>>,
+    },
+    /// Resume the current print job.
+    ResumeJob {
+        respond_to: oneshot::Sender<Result<(), String>>,
+    },
+    /// Cancel the current print job.
+    CancelJob {
+        respond_to: oneshot::Sender<Result<(), String>>,
+    },
 }

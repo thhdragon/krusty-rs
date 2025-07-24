@@ -30,9 +30,10 @@ mod tests {
         let cursor = Cursor::new(gcode.as_bytes());
         let async_reader = AllowStdIo::new(cursor);
         let reader = BufReader::new(async_reader);
-        let mut parser = AsyncGCodeParser::new(reader, config).with_macro_expander(Box::new(macro_processor.clone()));
+        let parser = AsyncGCodeParser::new(reader, config).with_macro_expander(Box::new(macro_processor.clone())).into_stream();
         let mut commands = Vec::new();
         use futures_util::stream::StreamExt;
+        futures_util::pin_mut!(parser);
         while let Some(cmd) = parser.next().await {
             match cmd {
                 Ok(OwnedGCodeCommand::Word { letter, value, .. }) => commands.push((letter, value)),
@@ -62,10 +63,11 @@ mod tests {
         let cursor = Cursor::new(gcode.as_bytes());
         let async_reader = AllowStdIo::new(cursor);
         let reader = BufReader::new(async_reader);
-        let mut parser = AsyncGCodeParser::new(reader, config).with_macro_expander(Box::new(macro_processor.clone()));
+        let parser = AsyncGCodeParser::new(reader, config).with_macro_expander(Box::new(macro_processor.clone())).into_stream();
         let mut errors = Vec::new();
         let mut commands = Vec::new();
         use futures_util::stream::StreamExt;
+        futures_util::pin_mut!(parser);
         while let Some(cmd) = parser.next().await {
             match cmd {
                 Ok(OwnedGCodeCommand::Word { letter, value, .. }) => commands.push((letter, value)),
@@ -97,9 +99,10 @@ mod tests {
         let cursor = Cursor::new(gcode.as_bytes());
         let async_reader = AllowStdIo::new(cursor);
         let reader = BufReader::new(async_reader);
-        let mut parser = AsyncGCodeParser::new(reader, config).with_macro_expander(Box::new(macro_processor.clone()));
+        let parser = AsyncGCodeParser::new(reader, config).with_macro_expander(Box::new(macro_processor.clone())).into_stream();
         let mut commands = Vec::new();
         use futures_util::stream::StreamExt;
+        futures_util::pin_mut!(parser);
         while let Some(cmd) = parser.next().await {
             match cmd {
                 Ok(OwnedGCodeCommand::Word { letter, value, .. }) => commands.push((letter, value)),

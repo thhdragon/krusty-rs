@@ -10,7 +10,7 @@ struct DummyExpander;
 
 #[async_trait]
 impl MacroExpander for DummyExpander {
-    async fn expand(&self, name: &str, args: &str) -> Option<Vec<OwnedGCodeCommand>> {
+    async fn expand(&self, name: String, args: String) -> Option<Vec<OwnedGCodeCommand>> {
         if name == "repeat" && args == "G1 X1" {
             Some(vec![
                 OwnedGCodeCommand::Word { letter: 'G', value: "1".to_string(), span: GCodeSpan { range: 0..1 } },

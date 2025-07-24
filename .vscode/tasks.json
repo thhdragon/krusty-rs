@@ -1,15 +1,20 @@
 {
-	"version": "2.0.0",
-	"tasks": [
-		{
-			"type": "shell",
-			"label": "cargo test",
-			"command": "cargo test",
-			"group": "test",
-			"isBackground": false,
-			"problemMatcher": [
-				"$rustc"
-			]
+  "version": "2.0.0",
+  "tasks": [
+	{
+	  "type": "shell",
+	  "label": "cargo test",
+	  "command": "cargo test",
+	  "group": "test",
+	  "isBackground": false,
+	  "problemMatcher": [
+		"$rustc"
+	  ],
+	  "options": {
+		"env": {
+		  "RUST_BACKTRACE": "1"
 		}
-	]
+	  }
+	}
+  ]
 }

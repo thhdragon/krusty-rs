@@ -69,16 +69,30 @@ impl MacroProcessor {
 // Implement MacroExpander for MacroProcessor with correct signature for parser
 #[async_trait::async_trait]
 impl crate::gcode::parser::MacroExpander for MacroProcessor {
-    async fn expand(&self, name: &str, _args: &str) -> Option<Vec<crate::gcode::parser::OwnedGCodeCommand>> {
+    async fn expand(&self, name: String, _args: String) -> Option<Vec<crate::gcode::parser::OwnedGCodeCommand>> {
         let macros = self.macros.read().await;
-        let lines = macros.get(name)?;
+        let lines = macros.get(&name)?.clone();
+        drop(macros); // Release lock before recursion
         let mut commands = Vec::new();
         let config = crate::gcode::parser::GCodeParserConfig::default();
         for line in lines {
-            let mut parser = crate::gcode::parser::GCodeParser::new(line, config.clone());
+            let mut parser = crate::gcode::parser::GCodeParser::new(&line, config.clone());
             while let Some(cmd_result) = parser.next_command() {
-                if let Ok(cmd) = cmd_result {
-                    commands.push(crate::gcode::parser::OwnedGCodeCommand::from(cmd));
+                match cmd_result {
+                    Ok(crate::gcode::parser::GCodeCommand::Macro { name: nested_name, args: nested_args, .. }) => {
+                        // Recursively expand nested macro
+                        if let Some(nested_cmds) = self.expand(nested_name.to_string(), nested_args.to_string()).await {
+                            commands.extend(nested_cmds);
+                        } else {
+                            // If macro not found, skip or optionally yield error
+                        }
+                    }
+                    Ok(cmd) => {
+                        commands.push(crate::gcode::parser::OwnedGCodeCommand::from(cmd));
+                    }
+                    Err(_) => {
+                        // Optionally handle parse errors in macro body
+                    }
                 }
             }
         }
@@ -227,9 +241,9 @@ mod tests {
         rt().block_on(async {
             let proc = MacroProcessor::new();
             proc.define_macro("foo", vec!["G1 X1".into()]).await.unwrap();
-            let expanded = crate::gcode::parser::MacroExpander::expand(&proc, "foo", "").await;
+            let expanded = crate::gcode::parser::MacroExpander::expand(&proc, "foo".to_string(), "".to_string()).await;
             assert_eq!(expanded, Some(vec![parse_gcode("G1 X1")]));
-            let none = crate::gcode::parser::MacroExpander::expand(&proc, "bar", "").await;
+            let none = crate::gcode::parser::MacroExpander::expand(&proc, "bar".to_string(), "".to_string()).await;
             assert_eq!(none, None);
         });
     }

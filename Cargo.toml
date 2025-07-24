@@ -1,4 +1,4 @@
-# Cargo.toml
+
 [package]
 name = "krusty-rs"
 version = "0.1.0"
@@ -23,6 +23,10 @@ futures-util = "0.3.31"
 futures = "0.3.31"
 async-trait = "0.1"
 futures-executor = "0.3"
+async-stream = "0.3.6"
+jsonwebtoken = "9"
+chrono = { version = "0.4", features = ["serde"] }
+axum-extra = { version = "0.9", features = ["typed-header"] }
 
 [features]
 default = []
@@ -33,7 +37,7 @@ web-interface = []
 criterion = "0.6.0"
 tokio-test = "0.4.4"
 
-
+axum = "0.8"
 
 [[bin]]
 name = "sim_harness"
@@ -43,7 +47,7 @@ path = "src/sim/harness.rs"
 name = "printer-host"
 path = "src/main.rs"
 
-overflow-checks = true
+axum-extra = "0.8"
 
 [profile.release]
 overflow-checks = true
@@ -52,5 +56,3 @@ codegen-units = 1
 opt-level = "z"
 panic = "abort"
 
-[env]
-RUST_BACKTRACE=1

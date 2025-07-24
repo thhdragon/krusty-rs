@@ -87,6 +87,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
                     let result = printer.process_gcode(&command).await.map_err(|e| e.to_string());
                     let _ = respond_to.send(result);
                 }
+                PrinterRequest::PauseJob { respond_to }
+                | PrinterRequest::ResumeJob { respond_to }
+                | PrinterRequest::CancelJob { respond_to } => {
+                    // TODO: Implement pause/resume/cancel logic for printer task if needed
+                    let _ = respond_to.send(Err("Not implemented in printer task".to_string()));
+                }
             }
         }
     });

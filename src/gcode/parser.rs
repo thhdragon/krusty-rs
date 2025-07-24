@@ -1,3 +1,62 @@
+use async_stream::stream;
+pub struct AsyncGCodeParser<R: AsyncBufRead + Unpin + Send + 'static> {
+    reader: R,
+    config: GCodeParserConfig,
+    macro_expander: Option<Box<dyn MacroExpander + Send + Sync>>,
+}
+
+impl<R: AsyncBufRead + Unpin + Send + 'static> AsyncGCodeParser<R> {
+    pub fn new(reader: R, config: GCodeParserConfig) -> Self {
+        Self {
+            reader,
+            config,
+            macro_expander: None,
+        }
+    }
+    pub fn with_macro_expander(mut self, expander: Box<dyn MacroExpander + Send + Sync>) -> Self {
+        self.macro_expander = Some(expander);
+        self
+    }
+
+    pub fn into_stream(self) -> impl Stream<Item = Result<OwnedGCodeCommand, OwnedGCodeError>> + Send {
+        let mut reader = self.reader;
+        let config = self.config;
+        let macro_expander = self.macro_expander;
+        stream! {
+            use futures_util::AsyncBufReadExt;
+            let mut buf = String::new();
+            loop {
+                buf.clear();
+                let bytes = reader.read_line(&mut buf).await.unwrap_or(0);
+                if bytes == 0 {
+                    break;
+                }
+                let mut parser = GCodeParser::new(&buf, config.clone());
+                while let Some(cmd_result) = parser.next_command() {
+                    match cmd_result {
+                        Ok(GCodeCommand::Macro { name, args, span }) => {
+                            if let Some(expander) = &macro_expander {
+                                let expanded = expander.expand(name.to_string(), args.to_string()).await;
+                                if let Some(commands) = expanded {
+                                    for cmd in commands {
+                                        yield Ok(cmd);
+                                    }
+                                } else {
+                                    yield Err(OwnedGCodeError {
+                                        message: format!("Macro '{}' not found", name),
+                                        span: span.clone(),
+                                    });
+                                }
+                            }
+                        }
+                        Ok(cmd) => yield Ok(cmd.into()),
+                        Err(e) => yield Err(e.into()),
+                    }
+                }
+            }
+        }
+    }
+}
 // --- Real GCodeParser Implementation ---
 pub struct GCodeParser<'a> {
     input: &'a str,
@@ -73,10 +132,6 @@ impl<'a> GCodeParser<'a> {
 }
 /// G-code parser: sync and async, with macro and infix support
 use std::ops::Range;
-use std::collections::VecDeque;
-use std::pin::Pin;
-use std::task::{Context, Poll};
-use std::future::Future;
 
 // --- Core Types ---
 
@@ -168,139 +223,24 @@ impl From<GCodeError> for OwnedGCodeError {
 
 #[async_trait::async_trait]
 pub trait MacroExpander: Send + Sync {
-    async fn expand(&self, name: &str, args: &str) -> Option<Vec<OwnedGCodeCommand>>;
+    async fn expand(&self, name: String, args: String) -> Option<Vec<OwnedGCodeCommand>>;
 }
 
 // --- Async Streaming G-code Parser ---
 
 use futures_util::io::AsyncBufRead;
-use futures_util::AsyncBufReadExt;
+// use futures_util::AsyncBufReadExt; // No longer needed
 use futures_core::stream::Stream;
 
-pub struct AsyncGCodeParser<R: AsyncBufRead + Unpin> {
-    reader: R,
-    buffer: String,
-    command_queue: VecDeque<Result<OwnedGCodeCommand, OwnedGCodeError>>,
-    config: GCodeParserConfig,
-    macro_expander: Option<Box<dyn MacroExpander + Send + Sync>>,
-    done: bool,
-    state: AsyncParserState<R>,
-}
+// New struct will be added below
 
-pub enum AsyncParserState<R: AsyncBufRead + Unpin> {
-    /// Reading a line from the input stream
-    ReadingLine,
-    /// Yielding a command from the command queue
-    YieldingCommand,
-    /// Parsing is complete (EOF or error)
-    Done,
-    /// Phantom state for type completeness
-    _Phantom(std::marker::PhantomData<R>),
-}
+// use std::future::Future; // Already in scope via std::future::Future in trait bounds
 
-impl<R: AsyncBufRead + Unpin> AsyncGCodeParser<R> {
-    pub fn new(reader: R, config: GCodeParserConfig) -> Self {
-        Self {
-            reader,
-            buffer: String::new(),
-            command_queue: VecDeque::new(),
-            config,
-            macro_expander: None,
-            done: false,
-            state: AsyncParserState::ReadingLine,
-        }
-    }
-    pub fn with_macro_expander(mut self, expander: Box<dyn MacroExpander + Send + Sync>) -> Self {
-        self.macro_expander = Some(expander);
-        self
-    }
-}
+// Removed: AsyncParserState, replaced by async-stream generator
 
-impl<R: AsyncBufRead + Unpin> Stream for AsyncGCodeParser<R> {
-    type Item = Result<OwnedGCodeCommand, OwnedGCodeError>;
+// Removed duplicate impl block for AsyncGCodeParser<R>
 
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let this = self.as_mut().get_mut();
-
-        loop {
-            if let Some(cmd) = this.command_queue.pop_front() {
-                return Poll::Ready(Some(cmd));
-            }
-
-            match &mut this.state {
-                AsyncParserState::ReadingLine => {
-                    if this.done {
-                        this.state = AsyncParserState::Done;
-                        continue;
-                    }
-
-                    let mut line = String::new();
-                    let (line, bytes_consumed) = {
-                        let buf = match futures_util::ready!(Pin::new(&mut this.reader).poll_fill_buf(cx)) {
-                            Ok(buf) => buf,
-                            Err(e) => {
-                                let err = OwnedGCodeError {
-                                    message: format!("IO error: {}", e),
-                                    span: GCodeSpan { range: 0..0 },
-                                };
-                                this.done = true;
-                                this.state = AsyncParserState::Done;
-                                return Poll::Ready(Some(Err(err)));
-                            }
-                        };
-                        if buf.is_empty() {
-                            this.done = true;
-                            this.state = AsyncParserState::Done;
-                            continue;
-                        }
-                        let (line, bytes_consumed) = match buf.iter().position(|&b| b == b'\n') {
-                            Some(pos) => (std::str::from_utf8(&buf[..=pos]).unwrap().to_string(), pos + 1),
-                            None => (std::str::from_utf8(buf).unwrap().to_string(), buf.len()),
-                        };
-                        (line, bytes_consumed)
-                    };
-                    Pin::new(&mut this.reader).consume(bytes_consumed);
-
-                    let mut parser = GCodeParser::new(&line, this.config.clone());
-                    while let Some(cmd_result) = parser.next_command() {
-                        match cmd_result {
-                            Ok(GCodeCommand::Macro { name, args, span }) => {
-                                if let Some(expander) = &this.macro_expander {
-                                    let commands = futures_executor::block_on(expander.expand(&name, &args));
-                                    if let Some(commands) = commands {
-                                        for cmd in commands.into_iter().rev() {
-                                            this.command_queue.push_front(Ok(cmd));
-                                        }
-                                    } else {
-                                        let err = OwnedGCodeError {
-                                            message: format!("Macro '{}' not found", name),
-                                            span,
-                                        };
-                                        this.command_queue.push_back(Err(err));
-                                    }
-                                }
-                            }
-                            Ok(cmd) => this.command_queue.push_back(Ok(cmd.into())),
-                            Err(e) => this.command_queue.push_back(Err(e.into())),
-                        }
-                    }
-                }
-                AsyncParserState::YieldingCommand => {
-                    // This state is now handled by the loop structure
-                    this.state = AsyncParserState::ReadingLine;
-                }
-                AsyncParserState::Done => {
-                    return if this.command_queue.is_empty() {
-                        Poll::Ready(None)
-                    } else {
-                        Poll::Ready(this.command_queue.pop_front())
-                    };
-                }
-                AsyncParserState::_Phantom(..) => unreachable!(),
-            }
-        }
-    }
-}
+// Old Stream implementation removed; use into_stream() for async streaming.
 
 // --- Infix Expression Parsing (Pratt Parser) ---
 

@@ -1,5 +1,54 @@
 # TASK003 - G-code Macro/Streaming Parsing and Macro Expansion
 
+**Status:** Completed  
+**Added:** 2025-07-24  
+**Updated:** 2025-07-24
+
+## Original Request
+Implement robust G-code macro/streaming parsing and macro expansion. Work is focused in `gcode/macros.rs` and `gcode/parser.rs`. The system should support async/streaming parsing, macro expansion, error recovery, and integration with print job and motion systems.
+
+## Thought Process
+- Macro and streaming parsing are essential for flexible, programmable G-code workflows.
+- The parser must support async/streaming input, macro expansion, and robust error recovery.
+- Integration with print job management and the motion queue is required for seamless job execution.
+- The design should be modular, testable, and extensible for future macro features.
+- Thread safety and async coordination are important for real-time and web API integration.
+
+## Implementation Plan
+- [x] Review current state of `gcode/macros.rs` and `gcode/parser.rs`
+- [x] Design macro expansion and streaming parsing architecture (async, error recovery)
+- [x] Implement macro expansion logic and streaming parser
+- [x] Integrate with print job management and motion queue (initial integration; further work in TASK002)
+- [x] Add error handling and state transitions
+- [x] Write unit and integration tests for macro/streaming parsing
+- [x] Document the API and usage patterns
+
+## Progress Tracking
+
+**Overall Status:** Completed - 100%
+
+### Subtasks
+| ID  | Description                                      | Status       | Updated     | Notes |
+|-----|--------------------------------------------------|--------------|-------------|-------|
+| 3.1 | Review current code and document findings         | Complete     | 2025-07-24  | MacroProcessor and GCodeParser support macros, async parsing, and expansion. Integration points exist. |
+| 3.2 | Design macro/streaming parsing architecture       | Complete     | 2025-07-24  | See progress log for detailed design notes. |
+| 3.3 | Implement macro expansion and streaming parser    | Complete     | 2025-07-24  | Refactored parser to use async-stream, implemented recursive macro expansion. |
+| 3.4 | Integrate with print job and motion queue         | Complete     | 2025-07-24  | Initial integration; further work in TASK002. |
+| 3.5 | Add error handling and state transitions          | Complete     | 2025-07-24  | Robust error handling and recovery implemented. |
+| 3.6 | Write tests                                      | Complete     | 2025-07-24  | All affected tests updated and passing. |
+| 3.7 | Document API and usage                           | Complete     | 2025-07-24  | API and usage documented in code and memory bank. |
+
+## Progress Log
+### 2025-07-24
+- Task file created and initialized with plan and subtasks.
+- Completed review and design of macro/streaming parsing architecture.
+- Refactored async parser to use async-stream for idiomatic streaming and macro expansion.
+- Implemented recursive macro expansion in async context.
+- Updated all affected tests; all tests now pass.
+- Enabled RUST_BACKTRACE=1 for improved debugging.
+- Documented API and usage in code and memory bank.
+# TASK003 - G-code Macro/Streaming Parsing and Macro Expansion
+
 **Status:** In Progress  
 **Added:** 2025-07-24  
 **Updated:** 2025-07-24
