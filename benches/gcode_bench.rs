@@ -26,15 +26,16 @@ fn bench_macro_expansion(c: &mut Criterion) {
     let macro_processor = MacroProcessor::new();
     let macro_body = (0..1000).map(|i| format!("G1 X{} Y{} F1500", i, i)).collect::<Vec<_>>();
     let rt = tokio::runtime::Runtime::new().unwrap();
+    // Define the macro only once before benchmarking
     rt.block_on(async {
         macro_processor.define_macro("BIGMACRO", macro_body).await.unwrap();
     });
     c.bench_function("expand BIGMACRO (1000 lines)", |b| {
         b.iter(|| {
-            let rt = tokio::runtime::Runtime::new().unwrap();
             rt.block_on(async {
-                let expanded = macro_processor.parse_and_expand_async("{BIGMACRO}").await;
-                assert_eq!(expanded.len(), 1000);
+                let expanded = macro_processor.parse_and_expand_async_owned("{BIGMACRO}").await;
+                let ok_count = expanded.iter().filter(|r| r.is_ok()).count();
+                assert_eq!(ok_count, 1000);
             });
         });
     });
