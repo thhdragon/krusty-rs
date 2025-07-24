@@ -9,7 +9,6 @@ mod web;
 
 use printer::Printer;
 use std::env;
-use std::sync::{Arc, Mutex};
 use web::printer_channel::{PrinterRequest};
 use tokio::sync::mpsc;
 use tokio::task::LocalSet;

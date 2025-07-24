@@ -294,7 +294,7 @@ impl<R: AsyncBufRead + Unpin> Stream for AsyncGCodeParser<R> {
         if this.done {
             return Poll::Ready(None);
         }
-        use futures_util::io::AsyncBufReadExt;
+        
         match Pin::new(&mut this.reader).poll_fill_buf(cx) {
             Poll::Ready(Ok(data)) if !data.is_empty() => {
                 let s = std::str::from_utf8(data).unwrap_or("");

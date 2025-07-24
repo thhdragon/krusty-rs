@@ -1,9 +1,6 @@
 // src/motion/planner/adaptive.rs
 
 // Import from the parent planner module and other necessary modules
-use super::{MotionSegment, MotionType};
-use crate::motion::kinematics::KinematicsType;
-use crate::config::Config;
 
 use std::collections::VecDeque;
 
