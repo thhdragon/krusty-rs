@@ -12,7 +12,6 @@ pub mod planner;
 pub mod controller;
 pub mod shaper;
 
-pub use planner::MotionConfig;
 pub use planner::MotionError;
 
 /// Statistics for the motion queue

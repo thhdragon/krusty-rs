@@ -3,7 +3,6 @@
 pub mod temperature; // This refers to src/hardware/temperature.rs
 
 // Re-export items you want easily accessible from the `hardware` module level
-pub use temperature::TemperatureController;
 
 use crate::config::Config;
 use std::time::Duration;

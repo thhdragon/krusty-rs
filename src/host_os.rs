@@ -5,7 +5,7 @@ use crate::printer::Printer;
 use crate::config::Config;
 use crate::gcode::GCodeProcessor;
 use crate::motion::{MotionController, MotionConfig};
-use crate::hardware::{HardwareManager, TemperatureController};
+use crate::hardware::HardwareManager;
 use crate::web::WebInterface;
 use crate::file_manager::FileManager;
 
@@ -346,7 +346,7 @@ impl PrinterHostOS {
             .await?;
         
         {
-            let mut state = self.state.write().await;
+            let state = self.state.write().await;
             // state.temperature.hotend_target = temperature; // Removed unsupported field
         }
         
@@ -361,7 +361,7 @@ impl PrinterHostOS {
             .await?;
         
         {
-            let mut state = self.state.write().await;
+            let state = self.state.write().await;
             // state.temperature.bed_target = temperature; // Removed unsupported field
         }
         
