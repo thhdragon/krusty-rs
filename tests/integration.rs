@@ -2,8 +2,8 @@
 
 #[cfg(test)]
 mod tests {
-    use krusty_rs::*;
-    use tokio::time::Duration;
+    
+    
 
     // ...existing code from integration_test.rs tests...
     // (Insert all #[tokio::test] functions here, as previously cataloged)
@@ -67,7 +67,7 @@ mod tests {
         let base_config = create_test_config();
         for config in configs {
             // Patch the base config if needed for planner construction
-            let mut patched_config = base_config.clone();
+            let patched_config = base_config.clone();
             // (If planner uses config.motion, patch here)
             let mut planner = MotionPlanner::new_from_config(&patched_config);
             let result = planner.plan_move([10.0, 0.0, 0.0, 0.0], 100.0, MotionType::Print).await;

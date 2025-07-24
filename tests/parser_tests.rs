@@ -1,9 +1,6 @@
 //! Tests for the advanced G-code parser prototype
 
 use async_trait::async_trait;
-use futures_util::io::Cursor;
-use futures_util::stream::StreamExt;
-use krusty_rs::print_job::PrintJobManager;
 use krusty_rs::gcode::parser::*;
 
 struct DummyExpander;

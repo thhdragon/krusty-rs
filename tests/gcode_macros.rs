@@ -4,7 +4,7 @@
 mod tests {
     use krusty_rs::gcode::macros::*;
     use krusty_rs::gcode::parser::*;
-    use tokio::runtime::Runtime;
+    
     use std::io::Cursor;
 
     // ...existing code from macros.rs tests...

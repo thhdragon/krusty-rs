@@ -44,7 +44,7 @@ mod tests {
     }
     use std::sync::Arc;
     use tokio::sync::RwLock;
-    use krusty_rs::{PrinterState, HardwareManager, Config, MotionConfig, MotionController};
+    use krusty_rs::{PrinterState, HardwareManager, Config, MotionController};
     use krusty_rs::motion::controller::MotionMode;
 
     #[tokio::test]

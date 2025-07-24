@@ -172,7 +172,7 @@ impl MacroProcessor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::gcode::parser::MacroExpander;
+    
     use tokio::runtime::Runtime;
 
     fn rt() -> Runtime {
