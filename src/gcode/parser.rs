@@ -1,6 +1,4 @@
-// Synchronous GCodeParser stub (to be replaced with real implementation)
-// --- Synchronous GCodeParser stub (to be replaced with real implementation) ---
-// This is needed for async parser integration and macro expansion.
+// --- Real GCodeParser Implementation ---
 pub struct GCodeParser<'a> {
     input: &'a str,
     config: GCodeParserConfig,
@@ -11,18 +9,66 @@ impl<'a> GCodeParser<'a> {
     pub fn new(input: &'a str, config: GCodeParserConfig) -> Self {
         Self { input, config, pos: 0 }
     }
+
+    fn parse_word(&mut self) -> Option<Result<GCodeCommand<'a>, GCodeError>> {
+        let start = self.pos;
+        let c = self.input[self.pos..].chars().next().unwrap();
+        self.pos += 1;
+        let value_start = self.pos;
+        while self.pos < self.input.len() && !self.input[self.pos..].starts_with('\n') {
+            self.pos += 1;
+        }
+        let value = &self.input[value_start..self.pos].trim();
+        Some(Ok(GCodeCommand::Word {
+            letter: c,
+            value,
+            span: GCodeSpan { range: start..self.pos },
+        }))
+    }
+
     pub fn next_command(&mut self) -> Option<Result<GCodeCommand<'a>, GCodeError>> {
-        // Dummy implementation: treat each line as a comment for now
+        while self.pos < self.input.len() && self.input[self.pos..].starts_with(char::is_whitespace) {
+            self.pos += 1;
+        }
+
         if self.pos >= self.input.len() {
             return None;
         }
-        let end = self.input[self.pos..].find('\n').map(|i| self.pos + i + 1).unwrap_or(self.input.len());
-        let line = &self.input[self.pos..end];
-        self.pos = end;
-        if line.trim().is_empty() {
-            return self.next_command();
+
+        let c = self.input[self.pos..].chars().next().unwrap();
+        match c {
+            ';' if self.config.enable_comments => {
+                let start = self.pos;
+                while self.pos < self.input.len() && self.input[self.pos..].chars().next().unwrap() != '\n' {
+                    self.pos += 1;
+                }
+                Some(Ok(GCodeCommand::Comment(&self.input[start..self.pos], GCodeSpan { range: start..self.pos })))
+            }
+            '{' if self.config.enable_macros => {
+                let start = self.pos;
+                self.pos += 1;
+                let name_start = self.pos;
+                while self.pos < self.input.len() && self.input[self.pos..].chars().next().unwrap() != '}' {
+                    self.pos += 1;
+                }
+                let name = &self.input[name_start..self.pos];
+                self.pos += 1;
+                Some(Ok(GCodeCommand::Macro {
+                    name,
+                    args: "",
+                    span: GCodeSpan { range: start..self.pos },
+                }))
+            }
+            _ if c.is_alphabetic() => self.parse_word(),
+            _ => {
+                let start = self.pos;
+                self.pos = self.input.len();
+                Some(Err(GCodeError {
+                    message: format!("Unexpected character: {}", c),
+                    span: GCodeSpan { range: start..self.pos },
+                }))
+            }
         }
-        Some(Ok(GCodeCommand::Comment(line.trim(), GCodeSpan { range: 0..line.len() })))
     }
 }
 /// G-code parser: sync and async, with macro and infix support
@@ -128,6 +174,7 @@ pub trait MacroExpander: Send + Sync {
 // --- Async Streaming G-code Parser ---
 
 use futures_util::io::AsyncBufRead;
+use futures_util::AsyncBufReadExt;
 use futures_core::stream::Stream;
 
 pub struct AsyncGCodeParser<R: AsyncBufRead + Unpin> {
@@ -143,13 +190,6 @@ pub struct AsyncGCodeParser<R: AsyncBufRead + Unpin> {
 pub enum AsyncParserState<R: AsyncBufRead + Unpin> {
     /// Reading a line from the input stream
     ReadingLine,
-    /// Expanding a macro asynchronously (future in progress)
-    ExpandingMacro {
-        fut: Pin<Box<dyn Future<Output = Option<Vec<OwnedGCodeCommand>>> + Send>>,
-        macro_name: String,
-        macro_args: String,
-        macro_span: GCodeSpan,
-    },
     /// Yielding a command from the command queue
     YieldingCommand,
     /// Parsing is complete (EOF or error)
@@ -178,112 +218,85 @@ impl<R: AsyncBufRead + Unpin> AsyncGCodeParser<R> {
 
 impl<R: AsyncBufRead + Unpin> Stream for AsyncGCodeParser<R> {
     type Item = Result<OwnedGCodeCommand, OwnedGCodeError>;
+
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.as_mut().get_mut();
-        // State machine for async G-code parsing
+
         loop {
+            if let Some(cmd) = this.command_queue.pop_front() {
+                return Poll::Ready(Some(cmd));
+            }
+
             match &mut this.state {
-                // State: Reading a line from the input
                 AsyncParserState::ReadingLine => {
-                    // use futures_util::AsyncBufReadExt; // No longer needed
                     if this.done {
                         this.state = AsyncParserState::Done;
                         continue;
                     }
-                    // Avoid multiple mutable borrows: scope reader_pin and buffer usage
+
                     let mut line = String::new();
-                    let bytes_to_consume = {
-                        let mut reader_pin = Pin::new(&mut this.reader);
-                        match futures_util::ready!(reader_pin.as_mut().poll_fill_buf(cx)) {
-                            Ok(bytes) if bytes.is_empty() => {
-                                this.done = true;
-                                this.state = AsyncParserState::Done;
-                                continue;
-                            }
-                            Ok(bytes) => {
-                                let s = match std::str::from_utf8(bytes) {
-                                    Ok(s) => s,
-                                    Err(e) => {
-                                        let err = OwnedGCodeError {
-                                            message: format!("Invalid UTF-8 in input: {}", e),
-                                            span: GCodeSpan { range: 0..bytes.len() },
-                                        };
-                                        this.done = true;
-                                        this.state = AsyncParserState::Done;
-                                        return Poll::Ready(Some(Err(err)));
-                                    }
-                                };
-                                if let Some(pos) = s.find('\n') {
-                                    line.push_str(&s[..=pos]);
-                                    pos + 1
-                                } else {
-                                    line.push_str(s);
-                                    bytes.len()
-                                }
-                            }
+                    let (line, bytes_consumed) = {
+                        let buf = match futures_util::ready!(Pin::new(&mut this.reader).poll_fill_buf(cx)) {
+                            Ok(buf) => buf,
                             Err(e) => {
                                 let err = OwnedGCodeError {
-                                    message: format!("IO error while reading: {}", e),
+                                    message: format!("IO error: {}", e),
                                     span: GCodeSpan { range: 0..0 },
                                 };
                                 this.done = true;
                                 this.state = AsyncParserState::Done;
                                 return Poll::Ready(Some(Err(err)));
                             }
-                        }
-                    };
-                    // Now, after the borrow is dropped, consume the bytes
-                    if bytes_to_consume > 0 {
-                        let reader_pin = Pin::new(&mut this.reader);
-                        reader_pin.consume(bytes_to_consume);
-                    }
-                    this.buffer.clear();
-                    this.buffer.push_str(&line);
-                    // Parse the buffer into commands using the sync parser logic
-                    if !this.buffer.trim().is_empty() {
-                        let config = this.config.clone();
-                        let mut parser = GCodeParser::new(&this.buffer, config);
-                        while let Some(cmd_result) = parser.next_command() {
-                            match cmd_result {
-                                Ok(cmd) => {
-                                    this.command_queue.push_back(Ok(OwnedGCodeCommand::from(cmd)));
-                                }
-                                Err(e) => {
-                                    this.command_queue.push_back(Err(OwnedGCodeError::from(e)));
-                                }
-                            }
-                        }
-                    }
-                    this.buffer.clear();
-                    if let Some(cmd) = this.command_queue.pop_front() {
-                        return Poll::Ready(Some(cmd));
-                    }
-                }
-                // State: Expanding a macro asynchronously
-                AsyncParserState::ExpandingMacro { fut, macro_name: _, macro_args: _, macro_span: _ } => {
-                    match fut.as_mut().poll(cx) {
-                        Poll::Ready(Some(commands)) => {
-                            for cmd in commands {
-                                this.command_queue.push_back(Ok(cmd));
-                            }
-                            this.state = AsyncParserState::YieldingCommand;
-                        }
-                        Poll::Ready(None) | Poll::Pending => {
+                        };
+                        if buf.is_empty() {
+                            this.done = true;
                             this.state = AsyncParserState::Done;
+                            continue;
+                        }
+                        let (line, bytes_consumed) = match buf.iter().position(|&b| b == b'\n') {
+                            Some(pos) => (std::str::from_utf8(&buf[..=pos]).unwrap().to_string(), pos + 1),
+                            None => (std::str::from_utf8(buf).unwrap().to_string(), buf.len()),
+                        };
+                        (line, bytes_consumed)
+                    };
+                    Pin::new(&mut this.reader).consume(bytes_consumed);
+
+                    let mut parser = GCodeParser::new(&line, this.config.clone());
+                    while let Some(cmd_result) = parser.next_command() {
+                        match cmd_result {
+                            Ok(GCodeCommand::Macro { name, args, span }) => {
+                                if let Some(expander) = &this.macro_expander {
+                                    let commands = futures_executor::block_on(expander.expand(&name, &args));
+                                    if let Some(commands) = commands {
+                                        for cmd in commands.into_iter().rev() {
+                                            this.command_queue.push_front(Ok(cmd));
+                                        }
+                                    } else {
+                                        let err = OwnedGCodeError {
+                                            message: format!("Macro '{}' not found", name),
+                                            span,
+                                        };
+                                        this.command_queue.push_back(Err(err));
+                                    }
+                                }
+                            }
+                            Ok(cmd) => this.command_queue.push_back(Ok(cmd.into())),
+                            Err(e) => this.command_queue.push_back(Err(e.into())),
                         }
                     }
                 }
-                // State: Yielding a command from the queue
                 AsyncParserState::YieldingCommand => {
+                    // This state is now handled by the loop structure
                     this.state = AsyncParserState::ReadingLine;
-                    continue;
                 }
-                // State: Parsing is complete
                 AsyncParserState::Done => {
-                    return Poll::Ready(None);
+                    return if this.command_queue.is_empty() {
+                        Poll::Ready(None)
+                    } else {
+                        Poll::Ready(this.command_queue.pop_front())
+                    };
                 }
-                // State: Phantom (should never occur)
-                AsyncParserState::_Phantom(_) => unreachable!(),
+                AsyncParserState::_Phantom(..) => unreachable!(),
             }
         }
     }

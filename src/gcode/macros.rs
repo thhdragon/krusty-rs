@@ -1,22 +1,3 @@
-// Implement MacroExpander for MacroProcessor with correct signature for parser
-#[async_trait::async_trait]
-impl crate::gcode::parser::MacroExpander for MacroProcessor {
-    async fn expand(&self, name: &str, _args: &str) -> Option<Vec<crate::gcode::parser::OwnedGCodeCommand>> {
-        let macros = self.macros.read().await;
-        let lines = macros.get(name)?;
-        let mut commands = Vec::new();
-        let config = crate::gcode::parser::GCodeParserConfig::default();
-        for line in lines {
-            let mut parser = crate::gcode::parser::GCodeParser::new(line, config.clone());
-            while let Some(cmd_result) = parser.next_command() {
-                if let Ok(cmd) = cmd_result {
-                    commands.push(crate::gcode::parser::OwnedGCodeCommand::from(cmd));
-                }
-            }
-        }
-        Some(commands)
-    }
-}
 /// G-code Macro System: Clean, idiomatic, async, and testable foundation.
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -35,12 +16,6 @@ pub enum MacroError {
     Other(String),
 }
 
-/// Trait for macro expansion, enabling pluggable macro sources.
-#[async_trait::async_trait]
-pub trait MacroExpander: Send + Sync {
-    /// Expand a macro by name and arguments, returning expanded commands or None if not found.
-    async fn expand(&self, name: &str, args: &str) -> Option<Vec<String>>;
-}
 
 /// Main macro processor: stores, expands, and manages macros.
 #[derive(Debug, Clone)]
@@ -91,10 +66,23 @@ impl MacroProcessor {
     }
 }
 
+// Implement MacroExpander for MacroProcessor with correct signature for parser
 #[async_trait::async_trait]
-impl MacroExpander for MacroProcessor {
-    async fn expand(&self, name: &str, _args: &str) -> Option<Vec<String>> {
-        self.macros.read().await.get(name).cloned()
+impl crate::gcode::parser::MacroExpander for MacroProcessor {
+    async fn expand(&self, name: &str, _args: &str) -> Option<Vec<crate::gcode::parser::OwnedGCodeCommand>> {
+        let macros = self.macros.read().await;
+        let lines = macros.get(name)?;
+        let mut commands = Vec::new();
+        let config = crate::gcode::parser::GCodeParserConfig::default();
+        for line in lines {
+            let mut parser = crate::gcode::parser::GCodeParser::new(line, config.clone());
+            while let Some(cmd_result) = parser.next_command() {
+                if let Ok(cmd) = cmd_result {
+                    commands.push(crate::gcode::parser::OwnedGCodeCommand::from(cmd));
+                }
+            }
+        }
+        Some(commands)
     }
 }
 
@@ -170,6 +158,7 @@ impl MacroProcessor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::gcode::parser::MacroExpander;
     use tokio::runtime::Runtime;
 
     fn rt() -> Runtime {
@@ -228,14 +217,19 @@ mod tests {
         });
     }
 
+    fn parse_gcode(s: &str) -> OwnedGCodeCommand {
+        let mut parser = GCodeParser::new(s, GCodeParserConfig::default());
+        parser.next_command().unwrap().unwrap().into()
+    }
+
     #[test]
     fn test_macro_expander_trait() {
         rt().block_on(async {
             let proc = MacroProcessor::new();
             proc.define_macro("foo", vec!["G1 X1".into()]).await.unwrap();
-            let expanded = MacroExpander::expand(&proc, "foo", "").await;
-            assert_eq!(expanded, Some(vec!["G1 X1".into()]));
-            let none = MacroExpander::expand(&proc, "bar", "").await;
+            let expanded = crate::gcode::parser::MacroExpander::expand(&proc, "foo", "").await;
+            assert_eq!(expanded, Some(vec![parse_gcode("G1 X1")]));
+            let none = crate::gcode::parser::MacroExpander::expand(&proc, "bar", "").await;
             assert_eq!(none, None);
         });
     }
