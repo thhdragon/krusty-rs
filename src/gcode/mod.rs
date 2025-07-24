@@ -21,7 +21,7 @@ pub enum GCodeError {
 #[derive(Debug, Clone)] // This should work now
 pub struct GCodeProcessor {
     state: Arc<RwLock<PrinterState>>,
-    motion_controller: MotionController,
+    motion_controller: Arc<RwLock<MotionController>>,
     queue: Arc<tokio::sync::Mutex<VecDeque<String>>>,
 }
 
@@ -29,7 +29,7 @@ impl GCodeProcessor {
     /// Create a new GCodeProcessor with shared printer state and a motion controller.
     pub fn new(
         state: Arc<RwLock<PrinterState>>,
-        motion_controller: MotionController,
+        motion_controller: Arc<RwLock<MotionController>>,
     ) -> Self {
         Self {
             state,
@@ -46,9 +46,10 @@ impl GCodeProcessor {
     pub async fn process_next_command(&self) -> Result<(), GCodeError> {
         let mut queue = self.queue.lock().await;
         if let Some(command) = queue.pop_front() {
-            // We need a mutable reference to self for process_command, so clone for now
-            let mut temp = self.clone();
-            temp.process_command(&command).await?;
+            // Call process_command on self, not on motion_controller
+            drop(queue); // Release lock before calling async fn
+            let mut this = self.clone();
+            this.process_command(&command).await?;
         }
         Ok(())
     }
@@ -91,8 +92,8 @@ impl GCodeProcessor {
         let target_y = y.unwrap_or(current_pos[1]);
         let target_z = z.unwrap_or(current_pos[2]);
         
-        self.motion_controller
-            .queue_linear_move([target_x, target_y, target_z], f, e)
+        let mut mc = self.motion_controller.write().await;
+        mc.queue_linear_move([target_x, target_y, target_z], f, e)
             .await
             .map_err(|e| GCodeError::MotionError(e.to_string()))?;
         
@@ -100,7 +101,8 @@ impl GCodeProcessor {
     }
 
     async fn handle_home(&mut self, _parts: &[&str]) -> Result<(), GCodeError> {
-        self.motion_controller.queue_home().await.map_err(|e| GCodeError::MotionError(e.to_string()))?;
+        let mut mc = self.motion_controller.write().await;
+        mc.queue_home().await.map_err(|e| GCodeError::MotionError(e.to_string()))?;
         Ok(())
     }
 
@@ -250,8 +252,9 @@ impl GCodeProcessor {
     }
 
     async fn get_current_position(&self) -> [f64; 3] {
-        let pos = self.motion_controller.get_current_position();
-        [pos[0], pos[1], pos[2]]
+        let mc = self.motion_controller.read().await;
+        let pos4 = mc.get_current_position();
+        [pos4[0], pos4[1], pos4[2]]
     }
     
     /// Get a copy of the current printer state.

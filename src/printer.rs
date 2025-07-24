@@ -10,7 +10,7 @@ pub struct Printer {
     config: Config,
     state: Arc<RwLock<PrinterState>>,
     gcode_processor: GCodeProcessor,
-    motion_controller: MotionController,
+    motion_controller: Arc<RwLock<MotionController>>,
     hardware_manager: HardwareManager,
     shutdown_tx: broadcast::Sender<()>,
 }
@@ -48,7 +48,7 @@ impl Printer {
         let (shutdown_tx, _) = broadcast::channel(1);
         
         let hardware_manager = HardwareManager::new(config.clone());
-        let motion_controller = MotionController::new(state.clone(), hardware_manager.clone(), &config);
+        let motion_controller = Arc::new(RwLock::new(MotionController::new(state.clone(), hardware_manager.clone(), &config)));
         let gcode_processor = GCodeProcessor::new(state.clone(), motion_controller.clone());
         
         Ok(Self {
@@ -79,8 +79,8 @@ impl Printer {
 
     async fn start_motion_control_loop(&self) -> Result<(), Box<dyn std::error::Error>> {
         let mut shutdown_rx = self.shutdown_tx.subscribe();
-        let mut motion_controller = self.motion_controller.clone();
-        tokio::spawn(async move {
+        let motion_controller = self.motion_controller.clone();
+        tokio::task::spawn_local(async move {
             let mut interval = tokio::time::interval(tokio::time::Duration::from_micros(1000));
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
             loop {
@@ -90,7 +90,8 @@ impl Printer {
                         break;
                     }
                     _ = interval.tick() => {
-                        if let Err(e) = motion_controller.update().await {
+                        let mut mc = motion_controller.write().await;
+                        if let Err(e) = mc.update().await {
                             tracing::error!("Motion controller update error: {}", e);
                         }
                     }
@@ -144,7 +145,7 @@ impl Printer {
         self.state.read().await.clone()
     }
     
-    pub fn get_motion_controller(&self) -> &MotionController {
-        &self.motion_controller
+    pub fn get_motion_controller(&self) -> Arc<RwLock<MotionController>> {
+        self.motion_controller.clone()
     }
 }

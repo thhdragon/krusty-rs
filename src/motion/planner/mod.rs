@@ -2,6 +2,9 @@
 
 use std::collections::VecDeque;
 use crate::config::Config; // Assuming Config is needed for new_from_config
+use crate::motion::kinematics::{Kinematics, create_kinematics};
+use crate::motion::junction::JunctionDeviation;
+use crate::motion::kinematics::KinematicsType;
 
 // Re-export shared types if they were defined here or move them here.
 // For now, assuming MotionType and core structs are defined here.
@@ -21,9 +24,19 @@ pub struct MotionConfig {
     pub max_jerk: [f64; 4],
     pub junction_deviation: f64,
     pub axis_limits: [[f64; 2]; 3],
-    // pub kinematics_type: KinematicsType, // Removed as not used
+    pub kinematics_type: KinematicsType,
     pub minimum_step_distance: f64,
     pub lookahead_buffer_size: usize,
+}
+
+fn parse_kinematics_type(s: &str) -> KinematicsType {
+    match s.to_lowercase().as_str() {
+        "cartesian" => KinematicsType::Cartesian,
+        "corexy" => KinematicsType::CoreXY,
+        "delta" => KinematicsType::Delta,
+        "hangprinter" => KinematicsType::Hangprinter,
+        _ => KinematicsType::Cartesian,
+    }
 }
 
 impl MotionConfig {
@@ -35,8 +48,23 @@ impl MotionConfig {
             max_jerk: [20.0, 20.0, 0.5, 2.0], // Example jerk values
             junction_deviation: 0.05, // mm
             axis_limits: [[0.0, 200.0], [0.0, 200.0], [0.0, 200.0]], // Example limits, should come from config ideally
-            // kinematics_type: KinematicsType::Cartesian, // Removed
+            kinematics_type: parse_kinematics_type(&config.printer.kinematics),
             minimum_step_distance: 0.001, // mm
+            lookahead_buffer_size: 16,
+        }
+    }
+}
+
+impl Default for MotionConfig {
+    fn default() -> Self {
+        Self {
+            max_velocity: [100.0, 100.0, 10.0, 50.0],
+            max_acceleration: [1000.0, 1000.0, 100.0, 1000.0],
+            max_jerk: [20.0, 20.0, 0.5, 2.0],
+            junction_deviation: 0.05,
+            axis_limits: [[0.0, 200.0], [0.0, 200.0], [0.0, 200.0]],
+            kinematics_type: KinematicsType::Cartesian,
+            minimum_step_distance: 0.001,
             lookahead_buffer_size: 16,
         }
     }
@@ -70,10 +98,17 @@ pub struct MotionPlanner {
     current_position: [f64; 4],
     motion_queue: VecDeque<MotionSegment>,
     planner_state: PlannerState,
+    kinematics: Box<dyn Kinematics + Send + Sync>,
+    junction_deviation: JunctionDeviation,
 }
 
 impl MotionPlanner {
     pub fn new(config: MotionConfig) -> Self {
+        let kinematics = create_kinematics(
+            config.kinematics_type,
+            config.axis_limits,
+        );
+        let junction_deviation = JunctionDeviation::new(config.junction_deviation);
         Self {
             config,
             current_position: [0.0, 0.0, 0.0, 0.0],
@@ -84,6 +119,8 @@ impl MotionPlanner {
                 segment_time: 0.0,
                 last_update: std::time::Instant::now(),
             },
+            kinematics,
+            junction_deviation,
         }
     }
 
@@ -98,71 +135,186 @@ impl MotionPlanner {
         feedrate: f64,
         motion_type: MotionType,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        tracing::debug!("Planning move to {:?}", target);
-
         let distance = self.calculate_distance(&self.current_position, &target);
-
         if distance < self.config.minimum_step_distance {
-            tracing::debug!("Skipping very small move: {}mm", distance);
             return Ok(());
         }
-
-        // --- Basic Acceleration Limiting (Placeholder logic, improve later) ---
-        // A very simplified approach: limit feedrate based on the axis with the highest demand relative to its max accel.
-        let mut limited_feedrate = feedrate;
-        if distance > 0.0 {
-            let dx = (target[0] - self.current_position[0]).abs() / distance;
-            let dy = (target[1] - self.current_position[1]).abs() / distance;
-            let dz = (target[2] - self.current_position[2]).abs() / distance;
-            let de = (target[3] - self.current_position[3]).abs() / distance;
-
-            // Find the most constrained axis based on acceleration
-            let mut max_acceleration_component = 0.0;
-            if dx > 0.0 { max_acceleration_component = f64::max(max_acceleration_component, self.config.max_acceleration[0] / dx); }
-            if dy > 0.0 { max_acceleration_component = f64::max(max_acceleration_component, self.config.max_acceleration[1] / dy); }
-            if dz > 0.0 { max_acceleration_component = f64::max(max_acceleration_component, self.config.max_acceleration[2] / dz); }
-            if de > 0.0 { max_acceleration_component = f64::max(max_acceleration_component, self.config.max_acceleration[3] / de); }
-
-            // Estimate max velocity based on acceleration and distance (v_max = sqrt(2 * a * d))
-            // This is a simplification assuming we accelerate halfway and decelerate halfway.
-            if max_acceleration_component > 0.0 {
-                let accel_limited_v = (2.0 * max_acceleration_component * distance).sqrt();
-                limited_feedrate = limited_feedrate.min(accel_limited_v).max(0.1); // Min feedrate to avoid divide by zero issues later
-            }
-        }
-
-        // Create the segment with calculated values
-        let duration = if limited_feedrate > 0.0 { distance / limited_feedrate } else { 1.0 }; // Avoid division by zero
-        // Acceleration calculation is complex for coordinated moves, use a placeholder average for now.
-        let avg_accel = (self.config.max_acceleration[0] + self.config.max_acceleration[1] + self.config.max_acceleration[2]) / 3.0 / 10.0; // Very rough
-
-        let segment = MotionSegment {
+        // Calculate acceleration-limited feedrate
+        let limited_feedrate = self.limit_feedrate_by_acceleration(&target, feedrate);
+        let mut segment = MotionSegment {
             target,
             feedrate,
             limited_feedrate,
             distance,
-            duration,
-            acceleration: avg_accel, // Placeholder
-            entry_speed: 0.0, // Placeholder
-            exit_speed: 0.0, // Placeholder
+            duration: distance / limited_feedrate.max(0.1),
+            acceleration: self.calculate_acceleration(&target),
+            entry_speed: 0.0,
+            exit_speed: 0.0,
             motion_type,
         };
-
+        // Apply junction deviation optimization
+        self.apply_junction_deviation(&mut segment)?;
         self.motion_queue.push_back(segment);
-        // Don't update self.current_position here yet, it should be updated when the move is executed.
-        // self.current_position = target;
-
-        tracing::debug!("Planned move: {:?} mm, dist: {:.3}mm, req v: {:.1}mm/s, lim v: {:.1}mm/s, dur: {:.3}s", target, distance, feedrate, limited_feedrate, duration);
-
-        // Trigger replanning if queue has enough moves (placeholder)
+        self.current_position = target;
+        // Trigger replanning when queue has enough moves
         if self.motion_queue.len() >= self.config.lookahead_buffer_size / 2 {
-            // self.replan_queue()?; // Implement later
-            tracing::debug!("Queue size {} reached lookahead trigger ({}). Replanning would happen here.", self.motion_queue.len(), self.config.lookahead_buffer_size / 2);
+            self.replan_queue().await?;
         }
-
         Ok(())
     }
 
+    /// Limit feedrate based on acceleration capabilities
+    fn limit_feedrate_by_acceleration(&self, target: &[f64; 4], requested_feedrate: f64) -> f64 {
+        let distance = self.calculate_distance(&self.current_position, target);
+        if distance == 0.0 {
+            return requested_feedrate;
+        }
+        let unit_vector = self.calculate_unit_vector(&self.current_position, target);
+        // Find limiting acceleration for each axis
+        let mut max_acceleration = f64::INFINITY;
+        for i in 0..4 {
+            let axis_component = unit_vector[i].abs();
+            if axis_component > 0.0 {
+                let axis_accel_limit = self.config.max_acceleration[i] / axis_component;
+                max_acceleration = max_acceleration.min(axis_accel_limit);
+            }
+        }
+        // Convert acceleration limit to velocity limit
+        let acceleration_limited_feedrate = (2.0 * max_acceleration * distance).sqrt();
+        requested_feedrate.min(acceleration_limited_feedrate).max(0.1)
+    }
+
+    /// Apply junction deviation optimization
+    fn apply_junction_deviation(&self, segment: &mut MotionSegment) -> Result<(), Box<dyn std::error::Error>> {
+        // Calculate unit vector for this move
+        let unit_vector = self.calculate_unit_vector(&self.current_position, &segment.target);
+        // If there's a previous segment, calculate junction speed
+        if let Some(prev_segment) = self.motion_queue.back() {
+            let prev_unit_vector = self.calculate_unit_vector(&self.current_position, &prev_segment.target);
+            let junction_speed = self.junction_deviation.calculate_junction_speed(
+                &prev_unit_vector,
+                &unit_vector,
+                segment.acceleration,
+            );
+            // Limit entry speed by junction deviation
+            segment.entry_speed = segment.entry_speed.min(junction_speed);
+        }
+        Ok(())
+    }
+
+    /// Replan motion queue for optimal performance
+    async fn replan_queue(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let queue_len = self.motion_queue.len();
+        if queue_len < 2 {
+            return Ok(());
+        }
+        tracing::debug!("Replanning {} motion segments", queue_len);
+        // Convert to vector for easier manipulation
+        let mut segments: Vec<MotionSegment> = self.motion_queue.drain(..).collect();
+        // Forward pass: calculate entry/exit speeds
+        self.forward_pass(&mut segments)?;
+        // Backward pass: optimize speeds
+        self.backward_pass(&mut segments)?;
+        // Recalculate durations with optimized speeds
+        self.recalculate_durations(&mut segments)?;
+        // Put optimized segments back in queue
+        for segment in segments {
+            self.motion_queue.push_back(segment);
+        }
+        Ok(())
+    }
+
+    /// Forward pass through motion segments
+    fn forward_pass(&mut self, segments: &mut [MotionSegment]) -> Result<(), Box<dyn std::error::Error>> {
+        let mut previous_unit_vector = None;
+        for i in 0..segments.len() {
+            // Calculate unit vector for this move
+            let unit_vector = if i == 0 {
+                self.calculate_unit_vector(&self.current_position, &segments[i].target)
+            } else {
+                self.calculate_unit_vector(&segments[i-1].target, &segments[i].target)
+            };
+            // Calculate junction speed if we have previous vector
+            if let Some(prev_unit) = previous_unit_vector {
+                let junction_speed = self.junction_deviation.calculate_junction_speed(
+                    &prev_unit,
+                    &unit_vector,
+                    segments[i].acceleration,
+                );
+                // Limit entry speed by junction deviation
+                segments[i].entry_speed = segments[i].entry_speed.min(junction_speed);
+            }
+            // Calculate maximum exit speed based on acceleration and distance
+            let max_exit_speed = ((segments[i].entry_speed * segments[i].entry_speed) + 
+                                 2.0 * segments[i].acceleration * segments[i].distance).sqrt();
+            segments[i].exit_speed = segments[i].limited_feedrate.min(max_exit_speed);
+            // Update for next iteration
+            previous_unit_vector = Some(unit_vector);
+        }
+        Ok(())
+    }
+
+    /// Backward pass through motion segments
+    fn backward_pass(&mut self, segments: &mut [MotionSegment]) -> Result<(), Box<dyn std::error::Error>> {
+        for i in (0..segments.len()).rev() {
+            let exit_speed = if i == segments.len() - 1 {
+                0.0 // Last segment stops
+            } else {
+                segments[i + 1].entry_speed
+            };
+            // Calculate maximum entry speed based on exit speed and deceleration
+            let max_entry_speed = ((exit_speed * exit_speed) + 
+                                  2.0 * segments[i].acceleration * segments[i].distance).sqrt();
+            // Limit entry speed
+            segments[i].entry_speed = segments[i].entry_speed.min(max_entry_speed);
+            // Recalculate exit speed based on limited entry speed
+            segments[i].exit_speed = ((segments[i].entry_speed * segments[i].entry_speed) + 
+                                     2.0 * segments[i].acceleration * segments[i].distance).sqrt()
+                                     .min(segments[i].limited_feedrate);
+        }
+        Ok(())
+    }
+
+    /// Recalculate segment durations with optimized speeds
+    fn recalculate_durations(&mut self, segments: &mut [MotionSegment]) -> Result<(), Box<dyn std::error::Error>> {
+        for segment in segments {
+            // For trapezoidal profile: t = (v_end - v_start + sqrt((v_end - v_start)² + 2*a*d)) / a
+            let delta_v = segment.exit_speed - segment.entry_speed;
+            let discriminant = delta_v * delta_v + 2.0 * segment.acceleration * segment.distance;
+            if discriminant >= 0.0 {
+                let time = (delta_v + discriminant.sqrt()) / segment.acceleration;
+                segment.duration = time.max(0.0);
+            } else {
+                // Fallback - should not happen with proper optimization
+                segment.duration = segment.distance / segment.limited_feedrate;
+            }
+        }
+        Ok(())
+    }
+
+    /// Calculate unit vector between two positions
+    fn calculate_unit_vector(&self, start: &[f64; 4], end: &[f64; 4]) -> [f64; 4] {
+        let mut delta = [
+            end[0] - start[0],
+            end[1] - start[1],
+            end[2] - start[2],
+            end[3] - start[3],
+        ];
+        let distance = (delta[0] * delta[0] + delta[1] * delta[1] + 
+                       delta[2] * delta[2] + delta[3] * delta[3]).sqrt();
+        if distance > 0.0 {
+            [
+                delta[0] / distance,
+                delta[1] / distance,
+                delta[2] / distance,
+                delta[3] / distance,
+            ]
+        } else {
+            [0.0, 0.0, 0.0, 0.0]
+        }
+    }
+
+    /// Calculate 3D Euclidean distance
     fn calculate_distance(&self, start: &[f64; 4], end: &[f64; 4]) -> f64 {
         let dx = end[0] - start[0];
         let dy = end[1] - start[1];
@@ -171,96 +323,92 @@ impl MotionPlanner {
         (dx * dx + dy * dy + dz * dz + de * de).sqrt()
     }
 
-    // Placeholder for acceleration limiting
-    fn limit_feedrate_by_acceleration(&self, _segment: &MotionSegment) -> f64 {
-        // Implement acceleration-based feedrate limiting
-        300.0 // Placeholder
-    }
-
-    // Placeholder for junction deviation
-    fn apply_junction_deviation(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        // Implement junction deviation logic using JunctionDeviation
-        // This would typically involve looking at the queue of segments
-        Ok(())
-    }
-
-    fn replan_queue(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let queue_len = self.motion_queue.len();
-        if queue_len < 2 {
-            return Ok(());
+    /// Calculate appropriate acceleration for a move
+    fn calculate_acceleration(&self, target: &[f64; 4]) -> f64 {
+        let distance = self.calculate_distance(&self.current_position, target);
+        if distance == 0.0 {
+            return self.config.max_acceleration[0];
         }
-        // println!("Replanning {} motion segments", queue_len);
-
-        // Placeholder for complex replanning logic (lookahead, junctions)
-        // For now, just demonstrate accessing segments
-        /*
-        let mut segments: Vec<MotionSegment> = self.motion_queue.drain(..).collect();
-        // ... perform optimizations ...
-        for segment in segments {
-            self.motion_queue.push_back(segment);
-        }
-        */
-        Ok(())
+        let unit_vector = self.calculate_unit_vector(&self.current_position, target);
+        // Weighted average based on axis movement
+        let weighted_accel = 
+            unit_vector[0].abs() * self.config.max_acceleration[0] +
+            unit_vector[1].abs() * self.config.max_acceleration[1] +
+            unit_vector[2].abs() * self.config.max_acceleration[2] +
+            unit_vector[3].abs() * self.config.max_acceleration[3];
+        weighted_accel
     }
 
-    /// Main update loop for motion execution.
-    /// This should be called at a high frequency.
+    /// Main update function - called at high frequency
     pub async fn update(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let now = std::time::Instant::now();
         let dt = (now - self.planner_state.last_update).as_secs_f64();
         self.planner_state.last_update = now;
-
         // Check if we need to start a new segment
         if self.planner_state.current_segment.is_none() {
             if let Some(segment) = self.motion_queue.pop_front() {
                 self.planner_state.current_segment = Some(segment);
                 self.planner_state.segment_time = 0.0;
                 self.planner_state.active = true;
-                tracing::debug!("Starting new segment to {:?}", self.planner_state.current_segment.as_ref().unwrap().target);
             } else {
                 self.planner_state.active = false;
-                // tracing::trace!("No segments in queue");
                 return Ok(());
             }
         }
-
         // Process current segment
-        if let Some(segment) = self.planner_state.current_segment.as_mut() {
+        let mut clear_segment = false;
+        if let Some(ref mut segment) = self.planner_state.current_segment {
             self.planner_state.segment_time += dt;
-
             // Check if segment is complete
             if self.planner_state.segment_time >= segment.duration {
+                // Segment complete - update position
+                self.current_position = segment.target;
+                clear_segment = true;
                 tracing::debug!(
                     "Completed move to [{:.3}, {:.3}, {:.3}, {:.3}]",
                     segment.target[0], segment.target[1], segment.target[2], segment.target[3]
                 );
-                self.current_position = segment.target;
-                self.planner_state.current_segment = None;
             } else {
                 // Interpolate position within segment
                 let progress = self.planner_state.segment_time / segment.duration;
+                // Simple linear interpolation (in advanced version, use proper motion profiles)
                 let current_pos = [
                     self.current_position[0] + (segment.target[0] - self.current_position[0]) * progress,
                     self.current_position[1] + (segment.target[1] - self.current_position[1]) * progress,
                     self.current_position[2] + (segment.target[2] - self.current_position[2]) * progress,
                     self.current_position[3] + (segment.target[3] - self.current_position[3]) * progress,
                 ];
-                tracing::trace!(
-                    "Interpolated position: [{:.3}, {:.3}, {:.3}, {:.3}]",
-                    current_pos[0], current_pos[1], current_pos[2], current_pos[3]
-                );
-                // In a real implementation, generate steps here based on current_pos
+                // Copy segment for use after borrow ends
+                let segment_copy = segment.clone();
+                let _ = segment; // End mutable borrow
+                // Generate steps for current position
+                self.generate_steps(&current_pos, &segment_copy).await?;
             }
+        }
+        if clear_segment {
+            self.planner_state.current_segment = None;
         }
         Ok(())
     }
 
-    // Placeholder for step generation - will connect to hardware later
-    // Using `&mut self` because we might need to interact with hardware state later (e.g., stepper drivers, IO buffers).
-    async fn generate_steps(&mut self, _position: &[f64; 4], _segment: &MotionSegment) -> Result<(), Box<dyn std::error::Error>> {
-        // This function would calculate the steps needed to reach _position
-        // and send them to the hardware.
-        // tracing::trace!("Generating steps for position {:?}", _position);
+    /// Generate step commands for current position
+    async fn generate_steps(
+        &self,
+        position: &[f64; 4],
+        segment: &MotionSegment,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        // Convert Cartesian position to motor positions
+        let cartesian = [position[0], position[1], position[2]];
+        let motor_positions = self.kinematics.cartesian_to_motors(&cartesian)?;
+        // In real implementation, this would:
+        // 1. Convert motor positions to step counts
+        // 2. Apply input shaping if configured
+        // 3. Send step commands to MCU
+        tracing::trace!(
+            "Position: [{:.3}, {:.3}, {:.3}, {:.3}] Motors: [{:.3}, {:.3}, {:.3}, {:.3}]",
+            position[0], position[1], position[2], position[3],
+            motor_positions[0], motor_positions[1], motor_positions[2], motor_positions[3]
+        );
         Ok(())
     }
 
@@ -300,6 +448,8 @@ impl Clone for MotionPlanner {
             current_position: self.current_position,
             motion_queue: self.motion_queue.clone(),
             planner_state: self.planner_state.clone(),
+            kinematics: self.kinematics.clone_box(),
+            junction_deviation: self.junction_deviation.clone(),
         }
     }
 }
@@ -308,12 +458,11 @@ impl Clone for MotionPlanner {
 impl std::fmt::Debug for MotionPlanner {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("MotionPlanner")
-            // .field("config", &self.config)
-            // .field("kinematics", &"Box<dyn Kinematics>")
-            // .field("junction_deviation", &self.junction_deviation)
             .field("current_position", &self.current_position)
             .field("motion_queue_len", &self.motion_queue.len())
             .field("planner_state", &self.planner_state)
+            .field("kinematics", &"Box<dyn Kinematics + Send>")
+            .field("junction_deviation", &self.junction_deviation)
             .finish()
     }
 }

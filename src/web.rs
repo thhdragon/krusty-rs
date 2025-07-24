@@ -1,90 +1,142 @@
-// src/web/mod.rs - Web interface for printer control
+// src/web.rs - Simple web API
+use axum::{
+    routing::{get, post},
+    Router, Json, Extension,
+};
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use crate::host_os::SystemState;
+use crate::printer::Printer;
 
-/// Web interface for remote printer control
-pub struct WebInterface {
-    state: Arc<RwLock<SystemState>>,
-    server_handle: Option<tokio::task::JoinHandle<()>>,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PositionRequest {
+    pub x: Option<f64>,
+    pub y: Option<f64>,
+    pub z: Option<f64>,
+    pub e: Option<f64>,
+    pub feedrate: Option<f64>,
 }
 
-impl WebInterface {
-    pub fn new(state: Arc<RwLock<SystemState>>) -> Self {
-        Self {
-            state,
-            server_handle: None,
-        }
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TemperatureRequest {
+    pub temperature: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PrinterStatus {
+    pub ready: bool,
+    pub position: [f64; 3],
+    pub temperature: f64,
+    pub print_progress: f64,
+}
+
+pub struct WebServer {
+    printer: Arc<RwLock<Printer>>,
+}
+
+impl WebServer {
+    pub fn new(printer: Arc<RwLock<Printer>>) -> Self {
+        Self { printer }
     }
 
-    /// Start the web server
-    pub async fn start(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        // In a real implementation, this would start an HTTP server
-        // For now, we'll just simulate it
-        tracing::info!("Web interface started on http://localhost:8080");
+    pub async fn start(&self, port: u16) -> Result<(), Box<dyn std::error::Error>> {
+        let app = Router::new()
+            .route("/", get(root))
+            .route("/status", get(get_status))
+            .route("/move", post(move_to_position))
+            .route("/home", post(home_axes))
+            .route("/temperature/hotend", post(set_hotend_temperature))
+            .route("/temperature/bed", post(set_bed_temperature))
+            .layer(Extension(self.printer.clone()));
+
+        let addr = format!("0.0.0.0:{}", port).parse()?;
+        tracing::info!("Starting web server on http://{}", addr);
         
-        let state = self.state.clone();
-        self.server_handle = Some(tokio::spawn(async move {
-            // Simulate web server running
-            loop {
-                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-                // In real implementation, handle HTTP requests here
-            }
-        }));
+        axum::Server::bind(&addr)
+            .serve(app.into_make_service())
+            .await?;
         
-        Ok(())
-    }
-
-    /// Get current system status for web API
-    pub async fn get_status(&self) -> SystemState {
-        self.state.read().await.clone()
-    }
-
-    /// Handle a web command
-    pub async fn handle_command(&self, command: WebCommand) -> Result<String, Box<dyn std::error::Error>> {
-        match command {
-            WebCommand::GetStatus => {
-                let status = self.get_status().await;
-                Ok(serde_json::to_string(&status)?)
-            }
-            WebCommand::StartPrint => {
-                // Would trigger print start
-                Ok("Print started".to_string())
-            }
-            WebCommand::PausePrint => {
-                // Would trigger print pause
-                Ok("Print paused".to_string())
-            }
-            WebCommand::StopPrint => {
-                // Would trigger print stop
-                Ok("Print stopped".to_string())
-            }
-            WebCommand::Home => {
-                // Would trigger homing
-                Ok("Homing started".to_string())
-            }
-            WebCommand::MoveTo { x, y, z, f } => {
-                // Would trigger movement
-                Ok(format!("Moving to X:{:?} Y:{:?} Z:{:?} F:{:?}", x, y, z, f))
-            }
-        }
-    }
-
-    /// Shutdown the web interface
-    pub async fn shutdown(&self) -> Result<(), Box<dyn std::error::Error>> {
-        tracing::info!("Shutting down web interface");
-        // In real implementation, would gracefully shutdown HTTP server
         Ok(())
     }
 }
 
-/// Web commands that can be received
-#[derive(Debug, Clone)]
-pub enum WebCommand {
-    GetStatus,
-    StartPrint,
-    PausePrint,
-    StopPrint,
-    Home,
-    MoveTo { x: Option<f64>, y: Option<f64>, z: Option<f64>, f: Option<f64> },
+async fn root() -> &'static str {
+    "Krusty-RS 3D Printer API"
+}
+
+async fn get_status(
+    Extension(printer): Extension<Arc<RwLock<Printer>>>,
+) -> Result<Json<PrinterStatus>, (axum::http::StatusCode, String)> {
+    let printer_guard = printer.read().await;
+    let state = printer_guard.get_state().await;
+    
+    let status = PrinterStatus {
+        ready: state.ready,
+        position: state.position,
+        temperature: state.temperature,
+        print_progress: state.print_progress,
+    };
+    
+    Ok(Json(status))
+}
+
+async fn move_to_position(
+    Extension(printer): Extension<Arc<RwLock<Printer>>>,
+    Json(request): Json<PositionRequest>,
+) -> Result<Json<&'static str>, (axum::http::StatusCode, String)> {
+    let mut printer_guard = printer.write().await;
+    
+    // Get current position
+    let current_pos = printer_guard.get_current_position();
+    
+    let target_x = request.x.unwrap_or(current_pos[0]);
+    let target_y = request.y.unwrap_or(current_pos[1]);
+    let target_z = request.z.unwrap_or(current_pos[2]);
+    let target_e = request.e.unwrap_or(current_pos[3]);
+    let feedrate = request.feedrate;
+    
+    // Move to target position
+    match printer_guard.queue_linear_move(
+        [target_x, target_y, target_z],
+        feedrate,
+        Some(target_e - current_pos[3]), // Relative E move
+    ).await {
+        Ok(()) => Ok(Json("Move queued successfully")),
+        Err(e) => Err((axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string())),
+    }
+}
+
+async fn home_axes(
+    Extension(printer): Extension<Arc<RwLock<Printer>>>,
+) -> Result<Json<&'static str>, (axum::http::StatusCode, String)> {
+    let mut printer_guard = printer.write().await;
+    
+    match printer_guard.queue_home().await {
+        Ok(()) => Ok(Json("Homing queued successfully")),
+        Err(e) => Err((axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string())),
+    }
+}
+
+async fn set_hotend_temperature(
+    Extension(printer): Extension<Arc<RwLock<Printer>>>,
+    Json(request): Json<TemperatureRequest>,
+) -> Result<Json<&'static str>, (axum::http::StatusCode, String)> {
+    let printer_guard = printer.read().await;
+    
+    match printer_guard.set_hotend_temperature(request.temperature).await {
+        Ok(()) => Ok(Json("Hotend temperature set")),
+        Err(e) => Err((axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string())),
+    }
+}
+
+async fn set_bed_temperature(
+    Extension(printer): Extension<Arc<RwLock<Printer>>>,
+    Json(request): Json<TemperatureRequest>,
+) -> Result<Json<&'static str>, (axum::http::StatusCode, String)> {
+    let printer_guard = printer.read().await;
+    
+    match printer_guard.set_bed_temperature(request.temperature).await {
+        Ok(()) => Ok(Json("Bed temperature set")),
+        Err(e) => Err((axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string())),
+    }
 }

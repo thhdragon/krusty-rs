@@ -1,57 +1,81 @@
-// src/motion/mod.rs
-
-// --- Submodules ---
-pub mod kinematics;
-pub mod junction;
-pub mod shaper;
-pub mod trajectory;
-pub mod stepper;
-pub mod planner; // This now points to src/motion/planner/mod.rs
-
-// --- Re-exports for external use ---
-pub use planner::{MotionPlanner, MotionConfig, MotionType, MotionSegment};
-
-// --- Imports ---
+// src/motion/mod.rs - Activate advanced features
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use crate::printer::PrinterState;
 use crate::hardware::HardwareManager;
+use crate::motion::planner::{MotionPlanner, MotionConfig, MotionType};
+use crate::motion::kinematics::create_kinematics;
+use crate::config::Config;
 
+mod planner;
+mod kinematics;
+mod junction;
 
-#[derive(Clone)]
+#[derive(Debug)]
 pub struct MotionController {
-    state: Arc<RwLock<PrinterState>>,
-    hardware_manager: HardwareManager,
-    planner: MotionPlanner,
-    step_generator: crate::motion::stepper::StepGenerator,
+    pub state: Arc<RwLock<PrinterState>>,
+    pub hardware_manager: HardwareManager,
+    pub planner: MotionPlanner,
+    pub current_position: [f64; 4],
+}
+
+impl Default for MotionController {
+    fn default() -> Self {
+        // Provide dummy/default values for test usage
+        use crate::hardware::HardwareManager;
+        use crate::motion::planner::MotionPlanner;
+        use crate::printer::PrinterState;
+        use std::sync::Arc;
+        use tokio::sync::RwLock;
+        Self {
+            state: Arc::new(RwLock::new(PrinterState::default())),
+            hardware_manager: HardwareManager::new(Default::default()),
+            planner: MotionPlanner::new(Default::default()),
+            current_position: [0.0; 4],
+        }
+    }
 }
 
 impl MotionController {
     pub fn new(
         state: Arc<RwLock<PrinterState>>,
         hardware_manager: HardwareManager,
-        config: &crate::config::Config,
+        config: &Config,
     ) -> Self {
-        let planner = MotionPlanner::new_from_config(config);
-        let get_steps_per_mm = |axis: &str| {
-            config.steppers.get(axis).map_or(80.0, |s| {
-                let steps = (s.full_steps_per_rotation * s.microsteps) as f64;
-                steps / s.rotation_distance
-            })
+        // Create motion configuration from printer config
+        let motion_config = MotionConfig {
+            max_velocity: [
+                config.printer.max_velocity,
+                config.printer.max_velocity,
+                config.printer.max_z_velocity,
+                50.0, // Extruder max velocity
+            ],
+            max_acceleration: [
+                config.printer.max_accel,
+                config.printer.max_accel,
+                config.printer.max_z_accel,
+                1000.0, // Extruder max acceleration
+            ],
+            max_jerk: [20.0, 20.0, 0.5, 2.0],
+            junction_deviation: 0.05,
+            axis_limits: [[0.0, 200.0], [0.0, 200.0], [0.0, 200.0]],
+            kinematics_type: match config.printer.kinematics.as_str() {
+                "corexy" => crate::motion::kinematics::KinematicsType::CoreXY,
+                "delta" => crate::motion::kinematics::KinematicsType::Delta,
+                "hangprinter" => crate::motion::kinematics::KinematicsType::Hangprinter,
+                _ => crate::motion::kinematics::KinematicsType::Cartesian,
+            },
+            minimum_step_distance: 0.001,
+            lookahead_buffer_size: 32,
         };
-        let steps_per_mm = [
-            get_steps_per_mm("x"),
-            get_steps_per_mm("y"),
-            get_steps_per_mm("z"),
-            get_steps_per_mm("e"),
-        ];
-        let direction_invert = [false, false, false, false];
-        let step_generator = crate::motion::stepper::StepGenerator::new(steps_per_mm, direction_invert);
+        
+        let planner = MotionPlanner::new(motion_config);
+        
         Self {
             state,
             hardware_manager,
             planner,
-            step_generator,
+            current_position: [0.0, 0.0, 0.0, 0.0],
         }
     }
 
@@ -61,81 +85,65 @@ impl MotionController {
         feedrate: Option<f64>,
         extrude: Option<f64>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let current_pos = self.planner.get_current_position();
-        let current_e = current_pos[3];
+        let current_e = self.current_position[3];
         let target_e = if let Some(e) = extrude {
             current_e + e
         } else {
             current_e
         };
+        
         let feedrate = feedrate.unwrap_or(300.0);
         let target_4d = [target[0], target[1], target[2], target_e];
+        
         let motion_type = if extrude.is_some() && extrude.unwrap() > 0.0 {
-            planner::MotionType::Print
+            MotionType::Print
         } else {
-            planner::MotionType::Travel
+            MotionType::Travel
         };
+        
+        // Plan the move with advanced motion planning
         self.planner.plan_move(target_4d, feedrate, motion_type).await?;
-        {
-            let mut state = self.state.write().await;
-            state.position = [target_4d[0], target_4d[1], target_4d[2]];
-        }
+        
+        // Update current position
+        self.current_position = target_4d;
+        
         Ok(())
     }
 
     pub async fn queue_home(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         tracing::info!("Homing all axes");
-        let current_pos = self.planner.get_current_position();
-        let home_target = [0.0, 0.0, 0.0, current_pos[3]];
-        self.planner.plan_move(home_target, 50.0, planner::MotionType::Home).await?;
+        
+        // Plan home move to [0, 0, 0, current_e]
+        let home_target = [0.0, 0.0, 0.0, self.current_position[3]];
+        self.planner.plan_move(home_target, 50.0, MotionType::Home).await?;
+        
+        // Update position
+        self.current_position = home_target;
+        
+        // Send home command to hardware
         let _ = self.hardware_manager.send_command("home_all").await;
+        
+        // Update printer state
         {
             let mut state = self.state.write().await;
             state.position = [0.0, 0.0, 0.0];
         }
+        
+        Ok(())
+    }
+
+    pub async fn update(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        // Update the motion planner at high frequency
+        self.planner.update().await?;
         Ok(())
     }
 
     pub fn emergency_stop(&mut self) {
         tracing::warn!("Emergency stop activated - clearing motion queue");
         self.planner.clear_queue();
-        // Add hardware emergency stop commands if needed in the future
-    }
-
-    pub async fn update(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        self.planner.update().await
-    }
-
-    pub fn queue_length(&self) -> usize {
-        self.planner.queue_length()
     }
 
     pub fn get_current_position(&self) -> [f64; 4] {
         self.planner.get_current_position()
-    }
-
-    pub fn set_position(&mut self, position: [f64; 4]) {
-        self.planner.set_position(position);
-    }
-}
-
-// Implement Debug manually for MotionController if derive(Debug) causes issues.
-impl std::fmt::Debug for MotionController {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("MotionController")
-            .field("state", &"Arc<RwLock<PrinterState>>")
-            .field("hardware_manager", &self.hardware_manager)
-            .field("planner", &self.planner)
-            .finish()
-    }
-}
-
-impl Default for MotionController {
-    fn default() -> Self {
-        use crate::config::Config;
-        let state = Arc::new(RwLock::new(PrinterState::new()));
-        let hardware_manager = HardwareManager::new(Config::default());
-        let config = Config::default();
-        MotionController::new(state, hardware_manager, &config)
     }
 }

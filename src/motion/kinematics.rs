@@ -9,7 +9,7 @@ pub enum KinematicsType {
 }
 
 /// Kinematics handler for different printer types
-pub trait Kinematics: KinematicsClone {
+pub trait Kinematics: KinematicsClone + Send + Sync {
     /// Convert Cartesian coordinates to motor positions
     fn cartesian_to_motors(&self, cartesian: &[f64; 3]) -> Result<[f64; 4], Box<dyn std::error::Error>>;
     
@@ -21,20 +21,20 @@ pub trait Kinematics: KinematicsClone {
 }
 
 pub trait KinematicsClone {
-    fn clone_box(&self) -> Box<dyn Kinematics>;
+    fn clone_box(&self) -> Box<dyn Kinematics + Send + Sync>;
 }
 
 impl<T> KinematicsClone for T
 where
-    T: 'static + Kinematics + Clone,
+    T: 'static + Kinematics + Clone + Send + Sync,
 {
-    fn clone_box(&self) -> Box<dyn Kinematics> {
+    fn clone_box(&self) -> Box<dyn Kinematics + Send + Sync> {
         Box::new(self.clone())
     }
 }
 
-impl Clone for Box<dyn Kinematics> {
-    fn clone(&self) -> Box<dyn Kinematics> {
+impl Clone for Box<dyn Kinematics + Send + Sync> {
+    fn clone(&self) -> Box<dyn Kinematics + Send + Sync> {
         self.clone_box()
     }
 }

@@ -27,7 +27,7 @@ pub struct PrinterHostOS {
     gcode_processor: GCodeProcessor,
     
     /// Motion control
-    motion_controller: MotionController,
+    motion_controller: Arc<RwLock<MotionController>>,
     
     /// Hardware interface
     hardware_manager: HardwareManager,
@@ -109,11 +109,11 @@ impl PrinterHostOS {
         
         let hardware_manager = HardwareManager::new(&config).await?;
         let motion_config = MotionConfig::new_from_host_config(&config);
-        let motion_controller = MotionController::new(
+        let motion_controller = Arc::new(RwLock::new(MotionController::new(
             state.clone(),
             hardware_manager.clone(),
             &config,
-        )?;
+        )?));
         
         let gcode_processor = GCodeProcessor::new(
             state.clone(),
@@ -206,7 +206,7 @@ impl PrinterHostOS {
     /// Motion control processing loop
     async fn start_motion_loop(&self) -> Result<(), Box<dyn std::error::Error>> {
         let mut shutdown_rx = self.shutdown_tx.subscribe();
-        let mut motion_controller = self.motion_controller.clone();
+        let motion_controller = self.motion_controller.clone();
         
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(tokio::time::Duration::from_micros(100));
@@ -214,7 +214,8 @@ impl PrinterHostOS {
                 tokio::select! {
                     _ = shutdown_rx.recv() => break,
                     _ = interval.tick() => {
-                        if let Err(e) = motion_controller.update().await {
+                        let mut controller = motion_controller.write().await;
+                        if let Err(e) = controller.update().await {
                             tracing::error!("Motion control error: {}", e);
                         }
                     }
