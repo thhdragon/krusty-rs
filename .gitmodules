@@ -1,6 +1,6 @@
 [submodule "sim/prunt_simulator"]
 	path = sim/prunt_simulator
-	url = https://github.com/Prunt3D/prunt_simulator.git
+	url = https://github.com/thhdragon/prunt_simulator.git
 [submodule "sim/sim/prunt"]
 	path = sim/sim/prunt
 	url = https://github.com/Prunt3D/prunt
