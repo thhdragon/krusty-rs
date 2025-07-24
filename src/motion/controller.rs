@@ -79,11 +79,14 @@ impl MotionController {
         if self.snap_crackle_enabled {
             // Call snap/crackle logic as a layer on top of planner
             // e.g., self.planner.apply_snap_crackle(...)
+            self.planner.plan_move(target_4d, feedrate, crate::motion::planner::MotionType::Print).await?;
         } else if self.adaptive_enabled {
             // Call adaptive logic as a layer on top of planner
             // e.g., self.planner.apply_adaptive(...)
+            self.planner.plan_move(target_4d, feedrate, crate::motion::planner::MotionType::Print).await?;
         } else {
             // Basic planner logic
+            self.planner.plan_move(target_4d, feedrate, crate::motion::planner::MotionType::Print).await?;
         }
         
         // Update current position
