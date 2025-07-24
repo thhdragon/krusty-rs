@@ -22,7 +22,7 @@ Krusty-rs is a modular, async Rust-based 3D printer host and motion control syst
   - **printer.rs**: High-level printer state, coordination, and control logic.
   - **printer.toml**: Example or default printer configuration.
   - **gcode/**
-    - **macro_processor.rs**: G-code macro expansion and variable substitution.
+    - **macros.rs**: G-code macro expansion and variable substitution.
     - **mod.rs**: G-code module root; may re-export or coordinate G-code submodules.
   - **hardware/**
     - **mod.rs**: Hardware abstraction root.
@@ -169,27 +169,48 @@ Krusty-rs is a modular, async Rust-based 3D printer host and motion control syst
 ### Incomplete Features
 - **Advanced Input Shaping (`motion/shaper.rs`, `motion/planner/snap_crackle.rs`)**: Some files exist for advanced motion smoothing and input shaping, but are not fully implemented or integrated.
 - **Print Job Management (`print_job.rs`)**: Basic structure present, but job queueing, pausing, and resuming are not fully implemented.
-- **G-code Macro Processing (`gcode/macro_processor.rs`)**: Macro expansion logic exists, but full G-code parsing and execution pipeline is not complete.
+- **G-code Macro Processing and Parsing (`gcode/macros.rs`, `gcode/parser.rs`)**: Macro expansion logic and an advanced parser exist, but:
+  - Full async/streaming parsing and macro expansion are not yet implemented
+  - Error recovery (skip to next line on error) is not yet robust
+  - Integration with print job and motion system is incomplete
+  - Comprehensive tests for edge cases and error handling are needed
+  - Documentation/examples for usage and extension are needed
 - **Web API Expansion**: Only basic status and G-code endpoints are implemented. No authentication, streaming, or advanced printer control endpoints.
 - **Hardware Abstraction**: Only temperature and stepper logic are present; other peripherals (fans, sensors, etc.) are not yet abstracted.
 - **Error Handling**: Many modules use `Box<dyn Error>` or basic error enums; more robust error handling and reporting is needed.
 
 ### Unused or Placeholder Code
-- **`motion/benchmark.rs`**: Benchmarking code is present but not integrated into CI or main workflow.
-- **`integration_test.rs`**: Exists for integration testing, but may not be fully wired up.
+- **`motion/benchmark.rs`**: Benchmarking code is present but not integrated into CI or main workflow. 
+  - Next: Integrate with CI, document usage, and ensure results are actionable for tuning motion parameters.
+- **`integration_test.rs`**: Exists for integration testing, but may not be fully wired up to the main test harness or CI.
+  - Next: Integrate with main test workflow, expand coverage, and document test scenarios.
 - **`printer.toml`**: Example config, not actively loaded by the main application.
+  - Next: Implement config loading in `main.rs` or config module, and document expected schema and usage.
 
 ### Simplified or Initial Features
 - **Motion Planning**: The main planner implements basic lookahead, junction deviation, and acceleration limiting, but advanced features (input shaping, multi-axis optimization) are stubbed or simplified.
+  - Next: Complete integration of advanced features, expand tests, and document limitations.
 - **Web API**: Only two endpoints (`/api/v1/status`, `/api/v1/gcode`) are implemented.
+  - Next: Expand API for printer control, monitoring, and streaming; add authentication and OpenAPI spec.
 - **Testing**: Motion tests use simple mock hardware and configs; coverage is limited to basic queueing and emergency stop scenarios.
+  - Next: Increase test coverage, add edge case and error condition tests, and validate with simulated/real hardware.
 - **Configuration**: Uses simple TOML parsing and struct-based config; no live reload or validation.
+  - Next: Add config validation, live reload support, and document schema.
 - **Hardware Abstraction**: Only temperature and stepper logic are present; other hardware is not yet abstracted.
+  - Next: Modularize hardware interfaces, add support for additional peripherals, and improve documentation.
 
 ### Reference: Prunt3D Advanced Motion Planning
 - Prunt3D implements a 31-phase (G⁴) motion profile, supporting independent limits on velocity, acceleration, jerk, snap, and crackle for ultra-smooth, physically realistic motion. This approach reduces vibration and ringing compared to traditional 3-phase (trapezoidal) or 7-phase (S-curve) profiles.
+  - Status: Core G⁴ profile and constraint logic are implemented in `motion/planner/snap_crackle.rs` and validated with unit tests. Further optimization and edge case handling are ongoing.
 - Advanced corner blending is achieved using degree-15 Bézier curves, allowing for smooth transitions with bounded higher-order derivatives (jerk, snap, crackle), integrated directly into the control system.
+  - Status: Bézier blending is implemented and integrated into the planning pipeline. Further validation and parameter tuning are recommended for new hardware.
 - Hardware-accelerated step generation and multi-threading ensure precise, jitter-free motion and real-time guarantees.
+  - Status: Step generation and multi-threading are planned for future releases. Current implementation is single-threaded and software-based.
+- Next Steps:
+  - [ ] Continue to optimize and validate G⁴ profile and blending on a variety of hardware setups
+  - [ ] Integrate hardware-accelerated step generation and multi-threading as hardware support matures
+  - [ ] Expand documentation and code comments to clarify Prunt3D-inspired algorithms and their limitations
+  - [ ] Regularly review Prunt3D upstream for new techniques and update implementation as needed
 - See:
   - [Prunt3D Features](https://prunt3d.com/docs/features/)
   - [G⁴ Motion Profiles](https://prunt3d.com/docs/features/#g-motion-profiles)
@@ -202,51 +223,87 @@ Krusty-rs is a modular, async Rust-based 3D printer host and motion control syst
 
 All core adaptive motion planning features are implemented, fully integrated, and validated with unit tests as of July 2025. See `src/motion/planner/adaptive.rs` for the optimizer, configuration, and tests, and `src/motion/controller.rs` for integration with the motion controller.
 
-The adaptive optimizer is fully integrated with the motion controller and planner. It collects real-time or simulated feedback (vibration, position error, speed efficiency, thermal stability) after each move, maintains a rolling buffer of recent metrics, and dynamically adjusts motion parameters (acceleration, jerk, junction deviation) using simple heuristics:
-
-- **Low vibration and high print quality**: Increases acceleration and junction deviation for higher speed.
-- **High vibration or low print quality**: Reduces acceleration and junction deviation for stability.
-- **Detected resonance**: Reduces jerk to minimize vibration.
-
-### Configuration
-- The adaptive optimizer is configured via `AdaptiveConfig` (see `planner/adaptive.rs`), with parameters for adaptation rate, learning rate, buffer size, and thresholds.
-- The optimizer can be enabled by setting the motion controller to `Adaptive` mode.
-
-### Integration Points
-- The motion controller (`controller.rs`) holds an optional `AdaptiveOptimizer` and updates it after each move.
-- The optimizer’s parameters are applied to the planner before planning each move using setter methods.
-- Unit tests in `planner/adaptive.rs` verify correct adaptation under various feedback scenarios.
+- **Implementation Status:**
+  - Adaptive optimizer logic is implemented and integrated with the motion controller and planner.
+  - Real-time or simulated feedback (vibration, position error, speed efficiency, thermal stability) is collected after each move.
+  - Rolling buffer of recent metrics is maintained for dynamic adjustment of motion parameters (acceleration, jerk, junction deviation).
+  - Unit tests in `planner/adaptive.rs` verify correct adaptation under various feedback scenarios.
+- **Configuration:**
+  - Configurable via `AdaptiveConfig` (see `planner/adaptive.rs`), with parameters for adaptation rate, learning rate, buffer size, and thresholds.
+  - Optimizer can be enabled by setting the motion controller to `Adaptive` mode.
+- **Integration Points:**
+  - Motion controller (`controller.rs`) holds an optional `AdaptiveOptimizer` and updates it after each move.
+  - Optimizer’s parameters are applied to the planner before planning each move using setter methods.
+- **Next Steps:**
+  - [ ] Expand real-world and simulated validation for a wider range of printer setups and feedback scenarios
+  - [ ] Tune adaptation heuristics and thresholds for optimal print quality and stability
+  - [ ] Document best practices for enabling and configuring adaptive motion planning
+  - [ ] Add more integration tests and edge case coverage
 
 ---
 
 ## Host OS Abstraction: Klipper Parity and Stubs
 
-All planned host OS abstraction features are stubbed and documented in `src/host_os.rs`, including robust serial protocol, clock/time sync, dynamic module system, multi-MCU support, and event extensibility. See this file for future development and implementation status.
+All planned host OS abstraction features are stubbed and documented in `src/host_os.rs`, including robust serial protocol, clock/time sync, dynamic module system, multi-MCU support, and event extensibility.
+
+- **Implementation Status:**
+  - All major host OS abstraction features are currently stubbed (not implemented).
+  - Documentation in `src/host_os.rs` outlines intended design, module structure, and future development.
+  - No serial protocol, time sync, or event system is active; all functions are placeholders or return errors.
+  - No host-to-MCU communication is performed yet; all hardware and motion modules assume local execution.
+
+- **Planned Features:**
+  - Robust serial protocol for MCU communication (inspired by Klipper, with CRC, framing, and async support)
+  - Clock/time synchronization across MCUs and host (for coordinated motion and event timing)
+  - Dynamic module/plugin system for extensibility (hot-reloadable modules, versioning, and isolation)
+  - Multi-MCU support for distributed control (multiple printers, toolheads, or expansion boards)
+  - Event system for extensibility and integration (async event bus, hooks for plugins and web API)
+  - Platform abstraction for Windows, Linux, and embedded targets (conditional compilation, feature flags)
+
+- **Next Steps:**
+  - [ ] Prioritize and implement core host OS abstraction features:
+    - [ ] Serial protocol (frame parsing, CRC, async I/O)
+    - [ ] Time sync (NTP, MCU clock sync, monotonic timers)
+    - [ ] Event system (async event bus, event types, and handlers)
+  - [ ] Incrementally integrate with motion, hardware, and web modules:
+    - [ ] Replace direct hardware calls with host OS abstraction layer
+    - [ ] Add integration tests for serial and event system
+    - [ ] Document API and extension points for future module/plugin developers
+  - [ ] Review Klipper, OctoPrint, and other open-source hosts for best practices and feature parity
+  - [ ] Update this section and `src/host_os.rs` as features are implemented or design evolves
 
 ---
 
 ## Recommendations
 
-- Expand G-code parsing and execution pipeline.
-  - [ ] Implement full G-code parsing (see `gcode/macro_processor.rs` and related modules)
-  - [ ] Integrate macro expansion and execution pipeline
-  - [ ] Add tests for edge cases and error handling
-- Add more comprehensive tests, especially for edge cases and error handling.
-  - [ ] Increase unit/integration test coverage in all motion and hardware modules
-  - [ ] Add tests for error conditions and invalid configs
-  - [ ] Validate with simulated and real hardware
-- Expand web API for richer printer control and monitoring.
-  - [ ] Add endpoints for printer control, monitoring, and streaming
-  - [ ] Implement authentication and access control
-  - [ ] Document API usage and add OpenAPI spec if possible
-- Refactor and document hardware abstraction for extensibility.
+- **Expand G-code parsing and execution pipeline:**
+  - [ ] Implement full G-code parsing and streaming (see `gcode/macros.rs`, `gcode/parser.rs`)
+  - [ ] Integrate macro expansion and execution pipeline with print job and motion system
+  - [ ] Add comprehensive tests for edge cases and error handling (invalid macros, nested macros, malformed G-code)
+  - [ ] Refactor for async/streaming parsing and non-blocking macro expansion (see latest Rust async best practices)
+  - [ ] Implement robust error recovery: on parse error, skip to next line before resuming parsing (prevents cascading errors)
+  - [ ] Ensure all errors include span/location info for diagnostics and web API reporting
+  - [ ] Document parser and macro processor usage, extension points, and limitations (add examples in code and docs)
+
+- **Add more comprehensive tests, especially for edge cases and error handling:**
+  - [ ] Increase unit/integration test coverage in all motion, hardware, and G-code modules
+  - [ ] Add tests for error conditions, invalid configs, and hardware failures
+  - [ ] Validate with simulated and real hardware (document test scenarios and results)
+
+- **Expand web API for richer printer control and monitoring:**
+  - [ ] Add endpoints for printer control, monitoring, and streaming (pause, resume, cancel, status, logs)
+  - [ ] Implement authentication and access control (JWT, API keys, or OAuth)
+  - [ ] Document API usage and add OpenAPI spec if possible (generate from Axum routes)
+
+- **Refactor and document hardware abstraction for extensibility:**
   - [ ] Modularize hardware interfaces (see `hardware/mod.rs`)
-  - [ ] Add support for additional peripherals (fans, sensors, etc.)
-  - [ ] Improve inline and module-level documentation
-- Remove or refactor unused code and stubs as features are completed.
+  - [ ] Add support for additional peripherals (fans, sensors, power control, etc.)
+  - [ ] Improve inline and module-level documentation (usage, extension, and safety notes)
+
+- **Remove or refactor unused code and stubs as features are completed:**
   - [ ] Identify and remove obsolete stubs (see `integration_test.rs`, `motion/benchmark.rs`, etc.)
-  - [ ] Refactor placeholder code as features are implemented
-  - [ ] Keep this document and TODOs up to date
+  - [ ] Refactor placeholder code as features are implemented (replace stubs with real logic)
+  - [ ] Keep this document and TODOs up to date (review after each major feature or refactor)
 
 ---
 

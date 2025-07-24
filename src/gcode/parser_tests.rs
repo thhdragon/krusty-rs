@@ -1,6 +1,23 @@
 //! Tests for the advanced G-code parser prototype
 
-use super::advanced_parser::*;
+use super::parser::*;
+use async_trait::async_trait;
+
+struct DummyExpander;
+
+#[async_trait]
+impl MacroExpander for DummyExpander {
+    async fn expand(&self, name: &str, args: &str) -> Option<Vec<OwnedGCodeCommand>> {
+        if name == "repeat" && args == "G1 X1" {
+            Some(vec![
+                OwnedGCodeCommand::Word { letter: 'G', value: "1".to_string(), span: GCodeSpan { range: 0..1 } },
+                OwnedGCodeCommand::Word { letter: 'X', value: "1".to_string(), span: GCodeSpan { range: 0..1 } },
+            ])
+        } else {
+            None
+        }
+    }
+}
 
 #[test]
 fn test_word_parsing() {
@@ -103,25 +120,13 @@ fn test_error_handling() {
     assert!(parser.next_command().is_none());
 }
 
-#[test]
-fn test_macro_expansion() {
-    struct DummyExpander;
-    impl<'a> MacroExpander<'a> for DummyExpander {
-        fn expand(&self, name: &'a str, args: &'a str) -> Option<Vec<GCodeCommand<'a>>> {
-            if name == "repeat" && args == "G1 X1" {
-                Some(vec![
-                    GCodeCommand::Word { letter: 'G', value: "1", span: GCodeSpan { range: 0..1 } },
-                    GCodeCommand::Word { letter: 'X', value: "1", span: GCodeSpan { range: 0..1 } },
-                ])
-            } else {
-                None
-            }
-        }
-    }
+#[tokio::test]
+async fn test_macro_expansion() {
     let src = "{repeat G1 X1} G2";
     let mut parser = GCodeParser::new(src, GCodeParserConfig { enable_macros: true, ..Default::default() })
         .with_macro_expander(&DummyExpander);
-    let cmd1 = parser.next_command().unwrap().unwrap();
+    // Use async version for macro expansion
+    let cmd1 = parser.next_command_async().await.unwrap().unwrap();
     match cmd1 {
         GCodeCommand::Word { letter, value, .. } => {
             assert_eq!(letter, 'G');
@@ -129,7 +134,7 @@ fn test_macro_expansion() {
         },
         _ => panic!("Expected G1 from macro expansion"),
     }
-    let cmd2 = parser.next_command().unwrap().unwrap();
+    let cmd2 = parser.next_command_async().await.unwrap().unwrap();
     match cmd2 {
         GCodeCommand::Word { letter, value, .. } => {
             assert_eq!(letter, 'X');
@@ -137,7 +142,7 @@ fn test_macro_expansion() {
         },
         _ => panic!("Expected X1 from macro expansion"),
     }
-    let cmd3 = parser.next_command().unwrap().unwrap();
+    let cmd3 = parser.next_command_async().await.unwrap().unwrap();
     match cmd3 {
         GCodeCommand::Word { letter, value, .. } => {
             assert_eq!(letter, 'G');
@@ -145,7 +150,7 @@ fn test_macro_expansion() {
         },
         _ => panic!("Expected G2 after macro expansion"),
     }
-    assert!(parser.next_command().is_none());
+    assert!(parser.next_command_async().await.is_none());
 }
 
 #[test]

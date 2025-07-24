@@ -109,6 +109,16 @@ impl FileManager {
         tracing::info!("Processed {} G-code lines from {}", lines.len(), use_path);
         Ok(lines)
     }
+
+    /// Stub: Check for updates (async)
+    pub async fn check_for_updates(&self) -> Result<(), Box<dyn std::error::Error>> {
+        Ok(())
+    }
+
+    /// Stub: Read file (async)
+    pub async fn read_file(&self, _file_path: &str) -> Result<String, Box<dyn std::error::Error>> {
+        Ok(String::new())
+    }
 }
 
 #[cfg(test)]

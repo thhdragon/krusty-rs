@@ -8,11 +8,20 @@ use tokio::sync::RwLock;
 
 mod junction;
 mod kinematics;
-mod planner;
+pub mod planner;
 pub mod controller;
 pub mod shaper;
 
+pub use planner::MotionConfig;
 pub use planner::MotionError;
+
+/// Statistics for the motion queue
+#[derive(Debug, Clone, Default)]
+pub struct QueueStats {
+    pub length: usize,
+    pub max_length: usize,
+    pub last_command: Option<String>,
+}
 
 #[derive(Debug)]
 pub struct MotionController {
@@ -121,5 +130,14 @@ impl MotionController {
 
     pub fn get_current_position(&self) -> [f64; 4] {
         self.planner.get_current_position()
+    }
+
+    pub fn get_queue_stats(&self) -> QueueStats {
+        // Stub: Replace with real stats collection
+        QueueStats {
+            length: 0,
+            max_length: 0,
+            last_command: None,
+        }
     }
 }

@@ -1,6 +1,11 @@
 // src/print_job.rs
 // Print job management stubs
 
+use crate::GCodeCommand;
+use crate::gcode::GCodeError;
+use std::sync::Arc;
+use tokio::sync::Mutex;
+
 /// Placeholder for print job state
 #[derive(Debug, Clone, Default)]
 pub struct PrintJobState {
@@ -14,11 +19,15 @@ pub struct PrintJobState {
 /// Main print job manager struct (stub)
 pub struct PrintJobManager {
     pub state: PrintJobState,
+    pub command_queue: Arc<Mutex<std::collections::VecDeque<Result<GCodeCommand<'static>, GCodeError>>>>,
 }
 
 impl PrintJobManager {
     pub fn new() -> Self {
-        Self { state: PrintJobState::default() }
+        Self {
+            state: PrintJobState::default(),
+            command_queue: Arc::new(Mutex::new(std::collections::VecDeque::new())),
+        }
     }
 
     /// Queue a new print job (stub)
@@ -43,6 +52,21 @@ impl PrintJobManager {
     pub fn cancel(&mut self) {
         // TODO: Implement job cancellation
         self.state.completed = true;
+    }
+
+    /// Queue a new print job from a Vec of parsed/expanded G-code commands
+    pub async fn queue_commands(&mut self, commands: Vec<Result<GCodeCommand<'static>, GCodeError>>) {
+        let mut queue = self.command_queue.lock().await;
+        for cmd in commands {
+            queue.push_back(cmd);
+        }
+        self.state.queued = true;
+    }
+
+    /// Async method to get the next command for processing
+    pub async fn next_command(&self) -> Option<Result<GCodeCommand<'static>, GCodeError>> {
+        let mut queue = self.command_queue.lock().await;
+        queue.pop_front()
     }
 }
 

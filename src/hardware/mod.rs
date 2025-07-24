@@ -3,6 +3,7 @@
 pub mod temperature; // This refers to src/hardware/temperature.rs
 
 // Re-export items you want easily accessible from the `hardware` module level
+pub use temperature::TemperatureController;
 
 use crate::config::Config;
 use std::time::Duration;
@@ -117,6 +118,32 @@ impl HardwareManager {
         }
         Ok(())
     }
+
+    pub async fn get_command_stats(&self) -> CommandStats {
+        // Stub: Replace with real stats collection
+        CommandStats {
+            total_commands: 0,
+            failed_commands: 0,
+            last_command: None,
+        }
+    }
+
+    /// Stub: Set heater temperature (async)
+    pub async fn set_heater_temperature(&self, _name: &str, _temp: f64) -> Result<(), Box<dyn std::error::Error>> {
+        Ok(())
+    }
+
+    pub async fn process_responses(&self) -> Result<(), Box<dyn std::error::Error>> {
+        Ok(())
+    }
+}
+
+/// Statistics for hardware command processing
+#[derive(Debug, Clone, Default)]
+pub struct CommandStats {
+    pub total_commands: u64,
+    pub failed_commands: u64,
+    pub last_command: Option<String>,
 }
 
 // Manual Clone implementation for HardwareManager

@@ -36,6 +36,8 @@ pub struct PrinterState {
     pub temperature: f64,
     pub bed_temperature: f64,
     pub print_progress: f64,
+    pub printing: bool,
+    pub paused: bool,
 }
 
 impl PrinterState {
@@ -46,6 +48,8 @@ impl PrinterState {
             temperature: 0.0,
             bed_temperature: 0.0,
             print_progress: 0.0,
+            printing: false,
+            paused: false,
         }
     }
 }

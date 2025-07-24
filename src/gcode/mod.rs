@@ -6,6 +6,7 @@ use tokio::sync::RwLock;
 
 use crate::motion::MotionController;
 use crate::printer::PrinterState;
+use crate::gcode::macros::MacroProcessor;
 
 #[derive(Debug, Error)]
 pub enum GCodeError {
@@ -24,6 +25,7 @@ pub struct GCodeProcessor {
     state: Arc<RwLock<PrinterState>>,
     motion_controller: Arc<RwLock<MotionController>>,
     queue: Arc<tokio::sync::Mutex<VecDeque<String>>>,
+    macros: Arc<MacroProcessor>,
 }
 
 impl GCodeProcessor {
@@ -36,6 +38,7 @@ impl GCodeProcessor {
             state,
             motion_controller,
             queue: Arc::new(tokio::sync::Mutex::new(VecDeque::new())),
+            macros: Arc::new(MacroProcessor::new()),
         }
     }
 
@@ -254,22 +257,15 @@ impl GCodeProcessor {
 
     /// Process a single G-code command string.
     pub async fn process_command(&mut self, command: &str) -> Result<(), GCodeError> {
-        use crate::gcode::advanced_parser::{GCodeParser, GCodeParserConfig, GCodeCommand};
-        let config = GCodeParserConfig {
-            enable_comments: true,
-            enable_checksums: true,
-            enable_infix: true,
-            enable_macros: true,
-            enable_vendor_extensions: true,
-        };
-        let mut parser = GCodeParser::new(command, config);
+        use crate::gcode::parser::GCodeCommand;
+        let macros = self.macros.clone();
+        let results = macros.parse_and_expand_async(command).await;
         let mut handled_any = false;
         let mut commands_to_process = Vec::new();
-        while let Some(cmd_result) = parser.next_command() {
+        for cmd_result in results {
             match cmd_result {
                 Ok(GCodeCommand::Checksum { command: inner, checksum, .. }) => {
                     tracing::info!("Checksum: {} (command: {:?})", checksum, inner);
-                    // Instead of recursion, push the inner command to a stack for processing
                     commands_to_process.push(*inner);
                 }
                 Ok(cmd) => {
@@ -282,19 +278,17 @@ impl GCodeProcessor {
         }
         while let Some(cmd) = commands_to_process.pop() {
             match cmd {
-                GCodeCommand::Word { letter, value, .. } => {
+                GCodeCommand::Word { letter, value, span: _ } => {
+                    // Split the command into parts: e.g., ["M104", "S200"]
                     let mut parts = vec![format!("{}{}", letter, value)];
-                    let mut param_str = value;
-                    while !param_str.is_empty() {
-                        let (param, rest) = if let Some(idx) = param_str[1..].find(|c: char| c.is_ascii_alphabetic()) {
-                            (&param_str[..idx+1], &param_str[idx+1..])
-                        } else {
-                            (param_str, "")
-                        };
-                        if !param.is_empty() {
-                            parts.push(param.to_string());
+                    // Extract the rest of the command string after the code (e.g., after "M104")
+                    // and split by whitespace to get parameters like S200
+                    if let Some(rest) = command.strip_prefix(&format!("{}{}", letter, value)) {
+                        for param in rest.trim().split_whitespace() {
+                            if !param.is_empty() {
+                                parts.push(param.to_string());
+                            }
                         }
-                        param_str = rest;
                     }
                     match parts[0].to_uppercase().as_str() {
                         "G0" | "G1" => self.handle_linear_move(&parts.iter().map(|s| s.as_str()).collect::<Vec<_>>()).await?,
@@ -347,10 +341,12 @@ impl GCodeProcessor {
     }
 }
 
-pub mod advanced_parser;
+pub mod parser;
+pub mod macros;
+pub mod gcode_executor;
 
 #[cfg(test)]
-mod advanced_parser_tests;
+mod parser_tests;
 
 #[cfg(test)]
 mod tests {
