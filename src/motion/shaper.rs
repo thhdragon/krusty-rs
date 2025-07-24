@@ -3,127 +3,117 @@
 /// 
 /// These filters reduce the oscillations that occur when the printer
 /// changes direction rapidly, improving print quality
+
+/// Trait for modular input shapers
+pub trait InputShaperTrait {
+    /// Process the next input position and return the shaped output
+    fn do_step(&mut self, input: f64) -> f64;
+}
+
 #[derive(Debug, Clone)]
-pub enum InputShaper {
-    None,
-    ZVD,      // Zero Vibration Derivative
-    ZVDD,     // Zero Vibration Derivative and Double Derivative
-    EI2,      // Extra Immunity 2
-    Custom { amplitudes: Vec<f64>, durations: Vec<f64> },
+/// Zero Vibration Derivative (ZVD) shaper implementation
+pub struct ZVDShaper {
+    pub buffer: Vec<f64>,
+    pub coeffs: [f64; 2],
+    pub delay: usize,
 }
 
-/// Input shaper configuration
-pub struct ShaperConfig {
-    pub shaper_type: InputShaper,
-    pub frequency: f64,  // Hz
-    pub damping: f64,    // 0.0 to 1.0
-}
-
-impl ShaperConfig {
-    pub fn new(shaper_type: InputShaper, frequency: f64, damping: f64) -> Self {
+impl ZVDShaper {
+    pub fn new(delay: usize, coeffs: [f64; 2]) -> Self {
         Self {
-            shaper_type,
-            frequency,
-            damping,
+            buffer: vec![0.0; delay + 1],
+            coeffs,
+            delay,
         }
-    }
-
-    /// Apply input shaping to a step sequence
-    /// 
-    /// This method takes a simple step command and returns a sequence
-    /// of shaped steps that reduce vibration
-    pub fn apply_shaping(&self, steps: Vec<(f64, bool)>) -> Vec<(f64, bool)> {
-        match &self.shaper_type {
-            InputShaper::None => steps,
-            InputShaper::ZVD => self.apply_zvd_shaping(steps),
-            InputShaper::ZVDD => self.apply_zvdd_shaping(steps),
-            InputShaper::EI2 => self.apply_ei2_shaping(steps),
-            InputShaper::Custom { amplitudes, durations } => {
-                self.apply_custom_shaping(steps, amplitudes, durations)
-            }
-        }
-    }
-
-    fn apply_zvd_shaping(&self, steps: Vec<(f64, bool)>) -> Vec<(f64, bool)> {
-        // ZVD (Zero Vibration Derivative) shaper
-        // Two impulses: 0.25 at t=0, 0.75 at t=T
-        // where T = π/(2*frequency*sqrt(1-damping²))
-        
-        let period = std::f64::consts::PI / 
-            (2.0 * self.frequency * (1.0 - self.damping * self.damping).sqrt());
-        
-        let mut shaped_steps = Vec::new();
-        
-        for (time, direction) in steps {
-            // First impulse (25%)
-            shaped_steps.push((time, direction));
-            
-            // Second impulse (75%) delayed by period
-            shaped_steps.push((time + period, direction));
-        }
-        
-        shaped_steps
-    }
-
-    fn apply_zvdd_shaping(&self, steps: Vec<(f64, bool)>) -> Vec<(f64, bool)> {
-        // ZVDD (Zero Vibration Derivative and Double Derivative) shaper
-        // Three impulses with specific amplitudes and timing
-        
-        let period = std::f64::consts::PI / 
-            (2.0 * self.frequency * (1.0 - self.damping * self.damping).sqrt());
-        
-        let mut shaped_steps = Vec::new();
-        
-        for (time, direction) in steps {
-            // Three impulses with ZVDD coefficients
-            shaped_steps.push((time, direction));                    // 12.5%
-            shaped_steps.push((time + period, direction));          // 75%
-            shaped_steps.push((time + 2.0 * period, direction));    // 12.5%
-        }
-        
-        shaped_steps
-    }
-
-    fn apply_ei2_shaping(&self, steps: Vec<(f64, bool)>) -> Vec<(f64, bool)> {
-        // EI2 (Extra Immunity 2) shaper - more robust to frequency variations
-        // Four impulses with specific coefficients
-        
-        let period = std::f64::consts::PI / 
-            (2.0 * self.frequency * (1.0 - self.damping * self.damping).sqrt());
-        
-        let mut shaped_steps = Vec::new();
-        
-        for (time, direction) in steps {
-            // Four impulses with EI2 coefficients
-            shaped_steps.push((time, direction));                    // 6.25%
-            shaped_steps.push((time + period, direction));          // 37.5%
-            shaped_steps.push((time + 2.0 * period, direction));    // 37.5%
-            shaped_steps.push((time + 3.0 * period, direction));    // 6.25%
-        }
-        
-        shaped_steps
-    }
-
-    fn apply_custom_shaping(
-        &self,
-        steps: Vec<(f64, bool)>,
-        amplitudes: &[f64],
-        durations: &[f64],
-    ) -> Vec<(f64, bool)> {
-        let mut shaped_steps = Vec::new();
-        
-        for (time, direction) in steps {
-            let mut cumulative_time = 0.0;
-            for (i, &amplitude) in amplitudes.iter().enumerate() {
-                if amplitude > 0.01 { // Ignore very small amplitudes
-                    shaped_steps.push((time + cumulative_time, direction));
-                }
-                if i < durations.len() {
-                    cumulative_time += durations[i];
-                }
-            }
-        }
-        
-        shaped_steps
     }
 }
+
+impl InputShaperTrait for ZVDShaper {
+    fn do_step(&mut self, input: f64) -> f64 {
+        // Shift buffer and insert new input
+        self.buffer.rotate_left(1);
+        self.buffer[self.delay] = input;
+        // Weighted sum of buffer for ZVD
+        self.coeffs[0] * self.buffer[0] + self.coeffs[1] * self.buffer[self.delay]
+    }
+}
+
+#[derive(Debug, Clone)]
+/// Sine Wave Demo shaper implementation
+pub struct SineWaveShaper {
+    pub magnitude: f64,
+    pub frequency: f64,
+    pub phase: f64,
+    pub sample_time: f64,
+}
+
+impl SineWaveShaper {
+    pub fn new(magnitude: f64, frequency: f64, sample_time: f64) -> Self {
+        Self {
+            magnitude,
+            frequency,
+            phase: 0.0,
+            sample_time,
+        }
+    }
+}
+
+impl InputShaperTrait for SineWaveShaper {
+    fn do_step(&mut self, input: f64) -> f64 {
+        let shaped = input + self.magnitude * (self.phase).sin();
+        self.phase += 2.0 * std::f64::consts::PI * self.frequency * self.sample_time;
+        shaped
+    }
+}
+
+#[derive(Debug, Clone)]
+/// Enum for supported input shaper types (extensible)
+pub enum InputShaperType {
+    ZVD(ZVDShaper),
+    SineWave(SineWaveShaper),
+    // Add more shaper types here
+}
+
+impl InputShaperTrait for InputShaperType {
+    fn do_step(&mut self, input: f64) -> f64 {
+        match self {
+            InputShaperType::ZVD(shaper) => shaper.do_step(input),
+            InputShaperType::SineWave(shaper) => shaper.do_step(input),
+            // Add more shaper types here
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+/// Per-axis input shaper assignment (e.g., for X, Y, Z, E)
+pub struct PerAxisInputShapers {
+    pub shapers: Vec<Option<InputShaperType>>, // None = no shaping for that axis
+}
+
+impl PerAxisInputShapers {
+    pub fn new(num_axes: usize) -> Self {
+        Self {
+            shapers: vec![None; num_axes],
+        }
+    }
+    pub fn set_shaper(&mut self, axis: usize, shaper: InputShaperType) {
+        if axis < self.shapers.len() {
+            self.shapers[axis] = Some(shaper);
+        }
+    }
+    pub fn do_step(&mut self, axis: usize, input: f64) -> f64 {
+        if let Some(shaper) = &mut self.shapers[axis] {
+            shaper.do_step(input)
+        } else {
+            input
+        }
+    }
+}
+
+// Example usage in planner (stub):
+// let mut shapers = PerAxisInputShapers::new(4); // X, Y, Z, E
+// shapers.set_shaper(0, InputShaperType::ZVD(ZVDShaper::new(...)));
+// let shaped_x = shapers.do_step(0, raw_x);
+
+// TODO: Add more shaper types and integrate trait-based shapers into the motion pipeline
+// TODO: Integrate InputShaper into motion planning pipeline when implemented.

@@ -10,6 +10,7 @@ mod junction;
 mod kinematics;
 mod planner;
 pub mod controller;
+pub mod shaper;
 
 pub use planner::MotionError;
 
@@ -29,10 +30,11 @@ impl Default for MotionController {
         use crate::printer::PrinterState;
         use std::sync::Arc;
         use tokio::sync::RwLock;
+        let dummy_config = crate::config::Config::default();
         Self {
             state: Arc::new(RwLock::new(PrinterState::default())),
             hardware_manager: HardwareManager::new(Default::default()),
-            planner: MotionPlanner::new(Default::default()),
+            planner: MotionPlanner::new_from_config(&dummy_config),
             current_position: [0.0; 4],
         }
     }
@@ -44,40 +46,12 @@ impl MotionController {
         hardware_manager: HardwareManager,
         config: &Config,
     ) -> Self {
-        // Create motion configuration from printer config
-        let motion_config = MotionConfig {
-            max_velocity: [
-                config.printer.max_velocity,
-                config.printer.max_velocity,
-                config.printer.max_z_velocity,
-                50.0, // Extruder max velocity
-            ],
-            max_acceleration: [
-                config.printer.max_accel,
-                config.printer.max_accel,
-                config.printer.max_z_accel,
-                1000.0, // Extruder max acceleration
-            ],
-            max_jerk: [20.0, 20.0, 0.5, 2.0],
-            junction_deviation: 0.05,
-            axis_limits: [[0.0, 200.0], [0.0, 200.0], [0.0, 200.0]],
-            kinematics_type: match config.printer.kinematics.as_str() {
-                "corexy" => crate::motion::kinematics::KinematicsType::CoreXY,
-                "delta" => crate::motion::kinematics::KinematicsType::Delta,
-                "hangprinter" => crate::motion::kinematics::KinematicsType::Hangprinter,
-                _ => crate::motion::kinematics::KinematicsType::Cartesian,
-            },
-            minimum_step_distance: 0.001,
-            lookahead_buffer_size: 32,
-        };
-        
-        let planner = MotionPlanner::new(motion_config);
-        
+        let planner = MotionPlanner::new_from_config(config);
         Self {
             state,
             hardware_manager,
             planner,
-            current_position: [0.0, 0.0, 0.0, 0.0],
+            current_position: [0.0; 4],
         }
     }
 

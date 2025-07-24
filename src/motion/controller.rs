@@ -4,6 +4,7 @@ use tokio::sync::RwLock;
 use crate::printer::PrinterState;
 use crate::hardware::HardwareManager;
 use crate::motion::planner::MotionPlanner;
+use crate::motion::planner::adaptive::{PerformanceMonitor, VibrationAnalyzer, PerformanceMetrics, AdaptiveOptimizer, AdaptiveConfig, VibrationAnalysis};
 
 #[derive(Debug, Clone)]
 pub enum MotionMode {
@@ -20,6 +21,9 @@ pub struct MotionController {
     adaptive_enabled: bool,
     snap_crackle_enabled: bool,
     current_position: [f64; 4],
+    performance_monitor: PerformanceMonitor,
+    vibration_analyzer: VibrationAnalyzer,
+    adaptive_optimizer: Option<AdaptiveOptimizer>,
 }
 
 impl MotionController {
@@ -27,15 +31,24 @@ impl MotionController {
         state: Arc<RwLock<PrinterState>>,
         hardware_manager: HardwareManager,
         mode: MotionMode,
+        config: &crate::config::Config,
     ) -> Self {
+        let adaptive_optimizer = if matches!(mode, MotionMode::Adaptive) {
+            Some(AdaptiveOptimizer::new(AdaptiveConfig::default()))
+        } else {
+            None
+        };
         let mut controller = Self {
             state,
             hardware_manager,
             mode: mode.clone(),
-            planner: MotionPlanner::new(crate::motion::planner::MotionConfig::default()),
+            planner: MotionPlanner::new_from_config(config),
             adaptive_enabled: matches!(mode, MotionMode::Adaptive),
             snap_crackle_enabled: matches!(mode, MotionMode::SnapCrackle),
             current_position: [0.0, 0.0, 0.0, 0.0],
+            performance_monitor: PerformanceMonitor::new(100),
+            vibration_analyzer: VibrationAnalyzer::new(1000.0, 1024),
+            adaptive_optimizer,
         };
         controller.configure_features();
         controller
@@ -89,6 +102,29 @@ impl MotionController {
             self.planner.plan_move(target_4d, feedrate, crate::motion::planner::MotionType::Print).await?;
         }
         
+        // Simulate feedback after move (replace with real sensor data when available)
+        let simulated_metrics = PerformanceMetrics {
+            avg_vibration: 0.01, // 10 microns RMS
+            max_vibration: 0.05, // 50 microns peak
+            vibration_trend: -0.001,
+            position_accuracy: 0.005,
+            processing_load: 0.3,
+            thermal_stability: 0.95,
+            speed_efficiency: 0.85,
+            quality_score: 0.92,
+        };
+        self.performance_monitor.update(simulated_metrics.clone());
+        self.vibration_analyzer.add_sample(simulated_metrics.avg_vibration);
+        // If adaptive mode, update optimizer and planner parameters
+        if let Some(opt) = &mut self.adaptive_optimizer {
+            let vibration_analysis = self.vibration_analyzer.analyze_vibrations();
+            opt.update_with_data(&simulated_metrics, &vibration_analysis).await?;
+            let params = opt.get_optimized_params();
+            // Update planner config with optimized parameters
+            self.planner.set_max_acceleration(params.max_acceleration);
+            self.planner.set_max_jerk(params.max_jerk);
+            self.planner.set_junction_deviation(params.junction_deviation);
+        }
         // Update current position
         self.current_position = target_4d;
         
@@ -135,6 +171,7 @@ impl MotionController {
         } else {
             self.planner.update().await?;
         }
+        // Optionally, update feedback here as well if needed
         Ok(())
     }
 

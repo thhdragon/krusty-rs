@@ -596,3 +596,65 @@ impl ConfigManager {
         }
     }
 }
+
+/// --- Host OS Feature Stubs (for parity with Klipper) ---
+
+/// Robust serial protocol stub (CRC, sequence, retransmit, windowing)
+pub struct SerialProtocolStub;
+impl SerialProtocolStub {
+    /// Send a command with CRC and sequence number (stub)
+    pub async fn send_command(&self, _cmd: &str) -> Result<(), String> {
+        // TODO: Implement CRC, sequence, retransmit, windowing
+        Ok(())
+    }
+    /// Receive and validate a response (stub)
+    pub async fn receive_response(&self) -> Result<String, String> {
+        // TODO: Implement CRC, sequence, retransmit, windowing
+        Ok("stub response".to_string())
+    }
+}
+
+/// Print time/MCU clock synchronization stub
+pub struct ClockSyncStub;
+impl ClockSyncStub {
+    pub fn new() -> Self { Self }
+    /// Sync host and MCU clocks (stub)
+    pub async fn sync(&self) -> Result<(), String> {
+        // TODO: Implement print time/MCU clock sync
+        Ok(())
+    }
+}
+
+/// Dynamic module system stub
+pub struct ModuleManagerStub;
+impl ModuleManagerStub {
+    pub fn new() -> Self { Self }
+    /// Load a module by name (stub)
+    pub fn load_module(&self, _name: &str) {
+        // TODO: Implement dynamic module loading
+    }
+}
+
+/// Multi-MCU abstraction stub
+pub struct MultiMCUManagerStub;
+impl MultiMCUManagerStub {
+    pub fn new() -> Self { Self }
+    /// Register a new MCU (stub)
+    pub fn register_mcu(&self, _id: &str) {
+        // TODO: Implement multi-MCU support
+    }
+}
+
+/// Event extensibility stub
+pub struct EventBusStub;
+impl EventBusStub {
+    pub fn new() -> Self { Self }
+    /// Register an event handler (stub)
+    pub fn register_handler(&self, _event: &str, _handler: fn()) {
+        // TODO: Implement event handler registration
+    }
+    /// Emit an event (stub)
+    pub fn emit(&self, _event: &str) {
+        // TODO: Implement event emission
+    }
+}

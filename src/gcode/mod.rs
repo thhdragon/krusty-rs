@@ -254,27 +254,83 @@ impl GCodeProcessor {
 
     /// Process a single G-code command string.
     pub async fn process_command(&mut self, command: &str) -> Result<(), GCodeError> {
-        let command = command.trim();
-        if command.is_empty() || command.starts_with(';') {
-            return Ok(());
+        use crate::gcode::advanced_parser::{GCodeParser, GCodeParserConfig, GCodeCommand};
+        let config = GCodeParserConfig {
+            enable_comments: true,
+            enable_checksums: true,
+            enable_infix: true,
+            enable_macros: true,
+            enable_vendor_extensions: true,
+        };
+        let mut parser = GCodeParser::new(command, config);
+        let mut handled_any = false;
+        let mut commands_to_process = Vec::new();
+        while let Some(cmd_result) = parser.next_command() {
+            match cmd_result {
+                Ok(GCodeCommand::Checksum { command: inner, checksum, .. }) => {
+                    tracing::info!("Checksum: {} (command: {:?})", checksum, inner);
+                    // Instead of recursion, push the inner command to a stack for processing
+                    commands_to_process.push(*inner);
+                }
+                Ok(cmd) => {
+                    commands_to_process.push(cmd);
+                }
+                Err(e) => {
+                    tracing::warn!("G-code parse error: {} at {:?}", e.message, e.span);
+                }
+            }
         }
-        let parts: Vec<&str> = command.split_whitespace().collect();
-        if parts.is_empty() {
-            return Ok(());
+        while let Some(cmd) = commands_to_process.pop() {
+            match cmd {
+                GCodeCommand::Word { letter, value, .. } => {
+                    let mut parts = vec![format!("{}{}", letter, value)];
+                    let mut param_str = value;
+                    while !param_str.is_empty() {
+                        let (param, rest) = if let Some(idx) = param_str[1..].find(|c: char| c.is_ascii_alphabetic()) {
+                            (&param_str[..idx+1], &param_str[idx+1..])
+                        } else {
+                            (param_str, "")
+                        };
+                        if !param.is_empty() {
+                            parts.push(param.to_string());
+                        }
+                        param_str = rest;
+                    }
+                    match parts[0].to_uppercase().as_str() {
+                        "G0" | "G1" => self.handle_linear_move(&parts.iter().map(|s| s.as_str()).collect::<Vec<_>>()).await?,
+                        "G28" => self.handle_home(&parts.iter().map(|s| s.as_str()).collect::<Vec<_>>()).await?,
+                        "G92" => self.handle_set_position(&parts.iter().map(|s| s.as_str()).collect::<Vec<_>>()).await?,
+                        "M104" => self.handle_set_hotend_temp(&parts.iter().map(|s| s.as_str()).collect::<Vec<_>>()).await?,
+                        "M109" => self.handle_set_hotend_temp_wait(&parts.iter().map(|s| s.as_str()).collect::<Vec<_>>()).await?,
+                        "M140" => self.handle_set_bed_temp(&parts.iter().map(|s| s.as_str()).collect::<Vec<_>>()).await?,
+                        "M190" => self.handle_set_bed_temp_wait(&parts.iter().map(|s| s.as_str()).collect::<Vec<_>>()).await?,
+                        "M82" => tracing::info!("Extruder set to absolute mode"),
+                        "M84" => tracing::info!("Motors disabled"),
+                        "M106" => self.handle_fan_on(&parts.iter().map(|s| s.as_str()).collect::<Vec<_>>()).await?,
+                        "M107" => tracing::info!("Fan turned off"),
+                        _ => tracing::warn!("Unhandled G-code: {}", command),
+                    }
+                    handled_any = true;
+                }
+                GCodeCommand::Comment(comment, _) => {
+                    tracing::info!("G-code comment: {}", comment);
+                }
+                GCodeCommand::Macro { name, args, .. } => {
+                    tracing::info!("Macro encountered: {} {}", name, args);
+                }
+                GCodeCommand::VendorExtension { name, args, .. } => {
+                    tracing::info!("Vendor extension: {} {}", name, args);
+                }
+                GCodeCommand::Checksum { .. } => {
+                    // Should not occur here, as we flatten one level above
+                }
+            }
         }
-        match parts[0].to_uppercase().as_str() {
-            "G0" | "G1" => self.handle_linear_move(&parts).await?,
-            "G28" => self.handle_home(&parts).await?,
-            "G92" => self.handle_set_position(&parts).await?,
-            "M104" => self.handle_set_hotend_temp(&parts).await?,
-            "M109" => self.handle_set_hotend_temp_wait(&parts).await?,
-            "M140" => self.handle_set_bed_temp(&parts).await?,
-            "M190" => self.handle_set_bed_temp_wait(&parts).await?,
-            "M82" => tracing::info!("Extruder set to absolute mode"),
-            "M84" => tracing::info!("Motors disabled"),
-            "M106" => self.handle_fan_on(&parts).await?,
-            "M107" => tracing::info!("Fan turned off"),
-            _ => tracing::warn!("Unhandled G-code: {}", command),
+        if !handled_any {
+            let trimmed = command.trim();
+            if trimmed.is_empty() || trimmed.starts_with(';') {
+                return Ok(());
+            }
         }
         Ok(())
     }
@@ -290,6 +346,11 @@ impl GCodeProcessor {
         self.state.read().await.clone()
     }
 }
+
+pub mod advanced_parser;
+
+#[cfg(test)]
+mod advanced_parser_tests;
 
 #[cfg(test)]
 mod tests {

@@ -1,3 +1,41 @@
+//! # Motion Shaper and Blending Configuration
+//!
+//! This module defines configuration structs for advanced motion planning, input shaper, and blending options.
+//!
+//! ## Example: TOML Configuration
+//!
+//! ```toml
+//! [motion.shaper.x]
+//! type = "zvd"
+//! frequency = 40.0
+//! damping = 0.1
+//!
+//! [motion.shaper.y]
+//! type = "sine"
+//! frequency = 35.0
+//!
+//! [motion.blending]
+//! type = "bezier"
+//! max_deviation = 0.2
+//! ```
+//!
+//! - Each axis (x, y, z, e) can have its own shaper type and parameters.
+//! - Blending (corner smoothing) is configured globally or per-axis as needed.
+//!
+//! ## Example: Rust Usage
+//!
+//! ```rust
+//! use crate::config::Config;
+//! let config: Config = toml::from_str(toml_str).unwrap();
+//! let motion = config.motion.as_ref().unwrap();
+//! assert_eq!(motion.shaper["x"].frequency, 40.0);
+//! assert_eq!(motion.blending.as_ref().unwrap().max_deviation, 0.2);
+//! // Validate config
+//! assert!(motion.validate().is_ok());
+//! ```
+//!
+//! See also: `src/motion/planner/mod.rs` for planner integration and assignment logic.
+
 // src/config.rs - Single configuration file
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -24,6 +62,8 @@ pub struct Config {
     pub heater_bed: HeaterBedConfig,
     #[serde(default)]
     pub steppers: HashMap<String, StepperConfig>,
+    #[serde(default)]
+    pub motion: Option<MotionConfig>, // Advanced motion/shaper config
 }
 
 impl Default for Config {
@@ -34,6 +74,7 @@ impl Default for Config {
             extruder: ExtruderConfig::default(),
             heater_bed: HeaterBedConfig::default(),
             steppers: HashMap::new(),
+            motion: None,
         }
     }
 }
@@ -169,6 +210,65 @@ impl Default for StepperConfig {
     }
 }
 
+/// Advanced motion planning, shaper, and blending configuration.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct MotionConfig {
+    #[serde(default)]
+    pub shaper: HashMap<String, AxisShaperConfig>,
+    #[serde(default)]
+    pub blending: Option<BlendingConfig>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum ShaperType {
+    Zvd,
+    Sine,
+    // Extend with more shaper types as needed
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AxisShaperConfig {
+    pub r#type: ShaperType,
+    pub frequency: f32,
+    pub damping: Option<f32>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum BlendingType {
+    Bezier,
+    // Extend with more blending types as needed
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct BlendingConfig {
+    pub r#type: BlendingType,
+    pub max_deviation: f32,
+}
+
+impl MotionConfig {
+    /// Validate motion config (frequency, max_deviation, etc.)
+    pub fn validate(&self) -> Result<(), String> {
+        for (axis, shaper) in &self.shaper {
+            if shaper.frequency <= 0.0 {
+                return Err(format!("Shaper frequency for axis '{}' must be > 0", axis));
+            }
+            if let Some(damping) = shaper.damping {
+                if damping < 0.0 || damping > 1.0 {
+                    return Err(format!("Shaper damping for axis '{}' must be between 0 and 1", axis));
+                }
+            }
+        }
+        if let Some(blending) = &self.blending {
+            if blending.max_deviation <= 0.0 {
+                return Err("Blending max_deviation must be > 0".to_string());
+            }
+        }
+        Ok(())
+    }
+}
+
 // Default value functions
 fn default_kinematics() -> String { "cartesian".to_string() }
 fn default_max_velocity() -> f64 { 300.0 }
@@ -250,5 +350,33 @@ mod tests {
         file.flush().unwrap();
         let result = load_config(file_path.to_str().unwrap());
         assert!(matches!(result, Err(ConfigError::Toml(_))));
+    }
+
+    #[test]
+    fn test_motion_config_parsing() {
+        let toml = r#"
+        [motion.shaper.x]
+        type = "zvd"
+        frequency = 40.0
+        damping = 0.1
+
+        [motion.shaper.y]
+        type = "sine"
+        frequency = 35.0
+
+        [motion.blending]
+        type = "bezier"
+        max_deviation = 0.2
+        "#;
+        let config: Config = toml::from_str(toml).unwrap();
+        let motion = config.motion.as_ref().unwrap();
+        assert_eq!(motion.shaper["x"].frequency, 40.0);
+        assert_eq!(motion.shaper["x"].r#type, ShaperType::Zvd);
+        assert_eq!(motion.shaper["x"].damping, Some(0.1));
+        assert_eq!(motion.shaper["y"].r#type, ShaperType::Sine);
+        assert_eq!(motion.blending.as_ref().unwrap().r#type, BlendingType::Bezier);
+        assert_eq!(motion.blending.as_ref().unwrap().max_deviation, 0.2);
+        // Validation should pass
+        assert!(motion.validate().is_ok());
     }
 }

@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Represents the current status of the printer.
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 pub struct PrinterStatusResponse {
     pub status: String,
     pub position: (f32, f32, f32),

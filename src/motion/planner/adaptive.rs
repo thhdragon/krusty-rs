@@ -6,8 +6,6 @@ use crate::motion::kinematics::KinematicsType;
 use crate::config::Config;
 
 use std::collections::VecDeque;
-use std::sync::Arc;
-use tokio::sync::RwLock;
 
 // --- Define types specific to the adaptive planner ---
 // (Many of these might be moved to common.rs or mod.rs if shared)
@@ -70,44 +68,15 @@ impl Default for OptimizationParams {
     }
 }
 
-// Placeholder for VibrationAnalysis if it's not moved elsewhere
-#[derive(Debug, Clone)]
-pub struct VibrationAnalysis {
-    pub frequency_spectrum: Vec<(f64, f64)>,  // (frequency, amplitude)
-    pub resonance_peaks: Vec<ResonancePeakPlaceholder>, // Placeholder type
-    pub dominant_frequencies: Vec<f64>,
-    pub overall_level: f64,
-}
+// --- Define the ResonancePeak struct for vibration analysis ---
 
 #[derive(Debug, Clone)]
-pub struct ResonancePeakPlaceholder {
-    pub frequency: f64,
-    pub amplitude: f64,
+pub struct ResonancePeak {
+    pub frequency: f64,      // Hz
+    pub amplitude: f64,      // RMS or peak value
+    pub bandwidth: Option<f64>, // Hz, optional
+    pub q_factor: Option<f64>,  // Quality factor, optional
 }
-
-// Placeholder for PerformanceMetrics if not shared
-#[derive(Debug, Clone, Default)]
-pub struct PerformanceMetrics {
-    pub avg_vibration: f64,
-    pub max_vibration: f64,
-    pub vibration_trend: f64,        // positive = increasing, negative = decreasing
-    pub position_accuracy: f64,      // mm average error
-    pub processing_load: f64,        // 0.0 to 1.0 CPU usage
-    pub thermal_stability: f64,      // temperature consistency
-    pub speed_efficiency: f64,       // actual vs theoretical speed
-    pub quality_score: f64,          // overall print quality estimate
-}
-
-// Placeholder for TrainingSample
-#[derive(Debug, Clone)]
-pub struct TrainingSamplePlaceholder {
-    pub conditions: Vec<f64>,        // [speed, acceleration, temperature, etc.]
-    pub actual_error: f64,           // mm measured error
-    pub predicted_error: f64,        // mm predicted error
-    pub correction_applied: f64,     // mm correction used
-    pub timestamp: std::time::Instant,
-}
-
 
 // --- Main Adaptive Optimizer Logic ---
 // (This will require significant fixes for the errors seen)
@@ -253,8 +222,8 @@ pub struct AdaptiveMotionPlanner {
     // core_planner: MotionPlanner, // The main planner from mod.rs
     // optimizer: AdaptiveOptimizer,
     // performance_monitor: PerformanceMonitorPlaceholder, // Define if needed
-    // error_predictor: ErrorPredictorPlaceholder, // Define if needed
-    // vibration_analyzer: VibrationAnalyzerPlaceholder, // Define if needed
+    error_predictor: ErrorPredictor, // Define if needed
+    vibration_analyzer: VibrationAnalyzer, // Define if needed
     config: AdaptiveConfig,
 }
 
@@ -266,8 +235,8 @@ impl AdaptiveMotionPlanner {
             // core_planner,
             // optimizer,
             // performance_monitor: PerformanceMonitorPlaceholder::new(100),
-            // error_predictor: ErrorPredictorPlaceholder::new(12, 64, 1),
-            // vibration_analyzer: VibrationAnalyzerPlaceholder::new(1000.0, 1024),
+            error_predictor: ErrorPredictor::new(12),
+            vibration_analyzer: VibrationAnalyzer::new(1000.0, 1024),
             config,
         }
     }
@@ -360,17 +329,208 @@ impl AdaptiveMotionPlanner {
     */
 }
 
-// Placeholder structs to avoid compilation issues for now
-// These would need to be properly defined or moved from the old file
-struct PerformanceMonitorPlaceholder;
-impl PerformanceMonitorPlaceholder {
-    fn new(_buffer_size: usize) -> Self { Self }
+// --- Adaptive planner logic to be implemented here in the future. ---
+
+// --- PerformanceMetrics struct for adaptive optimization ---
+
+#[derive(Debug, Clone, Default)]
+pub struct PerformanceMetrics {
+    pub avg_vibration: f64,        // RMS vibration (mm)
+    pub max_vibration: f64,        // Peak vibration (mm)
+    pub vibration_trend: f64,      // Slope/trend (mm/s)
+    pub position_accuracy: f64,    // Mean absolute error (mm)
+    pub processing_load: f64,      // CPU usage (0.0–1.0)
+    pub thermal_stability: f64,    // 0.0–1.0
+    pub speed_efficiency: f64,     // actual/requested speed
+    pub quality_score: f64,        // 0.0–1.0
 }
-struct ErrorPredictorPlaceholder;
-impl ErrorPredictorPlaceholder {
-    fn new(_input_size: usize, _hidden_size: usize, _output_size: usize) -> Self { Self }
+
+// --- TrainingSample struct for adaptive learning ---
+
+#[derive(Debug, Clone)]
+pub struct TrainingSample {
+    pub conditions: Vec<f64>,        // [speed, acceleration, temperature, etc.]
+    pub actual_error: f64,           // mm measured error
+    pub predicted_error: f64,        // mm predicted error
+    pub correction_applied: f64,     // mm correction used
+    pub timestamp: std::time::Instant,
 }
-struct VibrationAnalyzerPlaceholder;
-impl VibrationAnalyzerPlaceholder {
-    fn new(_sample_rate: f64, _analysis_window: usize) -> Self { Self }
+
+// --- PerformanceMonitor struct for tracking performance metrics ---
+
+pub struct PerformanceMonitor {
+    buffer: VecDeque<PerformanceMetrics>,
+    buffer_size: usize,
+}
+
+impl PerformanceMonitor {
+    pub fn new(buffer_size: usize) -> Self {
+        Self {
+            buffer: VecDeque::with_capacity(buffer_size),
+            buffer_size,
+        }
+    }
+
+    pub fn update(&mut self, metrics: PerformanceMetrics) {
+        if self.buffer.len() == self.buffer_size {
+            self.buffer.pop_front();
+        }
+        self.buffer.push_back(metrics);
+    }
+
+    pub fn get_current_metrics(&self) -> Option<&PerformanceMetrics> {
+        self.buffer.back()
+    }
+
+    pub fn get_trend(&self) -> Option<f64> {
+        // Example: compute trend of avg_vibration
+        if self.buffer.len() < 2 {
+            return None;
+        }
+        let first = self.buffer.front()?.avg_vibration;
+        let last = self.buffer.back()?.avg_vibration;
+        Some((last - first) / self.buffer.len() as f64)
+    }
+}
+
+// --- ErrorPredictor struct for error prediction in adaptive planning ---
+
+pub struct ErrorPredictor {
+    samples: VecDeque<TrainingSample>,
+    max_samples: usize,
+}
+
+impl ErrorPredictor {
+    pub fn new(max_samples: usize) -> Self {
+        Self {
+            samples: VecDeque::with_capacity(max_samples),
+            max_samples,
+        }
+    }
+
+    pub fn update_model(&mut self, sample: TrainingSample) {
+        if self.samples.len() == self.max_samples {
+            self.samples.pop_front();
+        }
+        self.samples.push_back(sample);
+    }
+
+    pub fn predict_error(&self, conditions: &[f64]) -> f64 {
+        // Simple average of actual_error for now; replace with regression as needed
+        if self.samples.is_empty() {
+            return 0.0;
+        }
+        let sum: f64 = self.samples.iter().map(|s| s.actual_error).sum();
+        sum / self.samples.len() as f64
+    }
+}
+
+// --- VibrationAnalysis struct for vibration analysis results ---
+
+#[derive(Debug, Clone)]
+pub struct VibrationAnalysis {
+    pub frequency_spectrum: Vec<f64>,  // Frequency bins from FFT
+    pub resonance_peaks: Vec<ResonancePeak>, // Detected resonance peaks
+    pub dominant_frequencies: Vec<f64>, // Frequencies with highest energy
+    pub overall_level: f64,            // Overall vibration level
+}
+
+// --- VibrationAnalyzer struct for analyzing vibrations ---
+
+pub struct VibrationAnalyzer {
+    sample_rate: f64,
+    analysis_window: usize,
+    samples: Vec<f64>,
+}
+
+impl VibrationAnalyzer {
+    pub fn new(sample_rate: f64, analysis_window: usize) -> Self {
+        Self {
+            sample_rate,
+            analysis_window,
+            samples: Vec::with_capacity(analysis_window),
+        }
+    }
+
+    pub fn add_sample(&mut self, value: f64) {
+        if self.samples.len() == self.analysis_window {
+            self.samples.remove(0);
+        }
+        self.samples.push(value);
+    }
+
+    pub fn analyze_vibrations(&self) -> VibrationAnalysis {
+        // Stub: In real code, perform FFT and peak detection
+        VibrationAnalysis {
+            frequency_spectrum: vec![],
+            resonance_peaks: vec![],
+            dominant_frequencies: vec![],
+            overall_level: self.samples.iter().map(|x| x.abs()).sum::<f64>() / self.samples.len().max(1) as f64,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio_test::block_on;
+
+    fn make_metrics(vibration: f64, accuracy: f64, quality: f64) -> PerformanceMetrics {
+        PerformanceMetrics {
+            avg_vibration: vibration,
+            max_vibration: vibration * 2.0,
+            vibration_trend: 0.0,
+            position_accuracy: accuracy,
+            processing_load: 0.2,
+            thermal_stability: 0.9,
+            speed_efficiency: 0.8,
+            quality_score: quality,
+        }
+    }
+
+    fn empty_vibration_analysis() -> VibrationAnalysis {
+        VibrationAnalysis {
+            frequency_spectrum: vec![],
+            resonance_peaks: vec![],
+            dominant_frequencies: vec![],
+            overall_level: 0.0,
+        }
+    }
+
+    #[test]
+    fn test_adaptive_optimizer_improves_params_on_good_feedback() {
+        let mut opt = AdaptiveOptimizer::new(AdaptiveConfig::default());
+        let metrics = make_metrics(0.002, 0.001, 0.95); // Low vibration, high quality
+        let vib = empty_vibration_analysis();
+        block_on(opt.update_with_data(&metrics, &vib)).unwrap();
+        let params = opt.get_optimized_params();
+        assert!(params.junction_deviation > 0.05); // Should increase
+        assert!(params.max_acceleration[0] > 3000.0); // Should increase
+    }
+
+    #[test]
+    fn test_adaptive_optimizer_reduces_params_on_bad_feedback() {
+        let mut opt = AdaptiveOptimizer::new(AdaptiveConfig::default());
+        let metrics = make_metrics(0.04, 0.01, 0.6); // High vibration, low quality
+        let vib = empty_vibration_analysis();
+        block_on(opt.update_with_data(&metrics, &vib)).unwrap();
+        let params = opt.get_optimized_params();
+        assert!(params.junction_deviation < 0.05); // Should decrease
+        assert!(params.max_acceleration[0] < 3000.0); // Should decrease
+    }
+
+    #[test]
+    fn test_adaptive_optimizer_handles_resonance() {
+        let mut opt = AdaptiveOptimizer::new(AdaptiveConfig::default());
+        let metrics = make_metrics(0.01, 0.005, 0.85);
+        let vib = VibrationAnalysis {
+            frequency_spectrum: vec![],
+            resonance_peaks: vec![ResonancePeak { frequency: 60.0, amplitude: 0.1, bandwidth: None, q_factor: None }],
+            dominant_frequencies: vec![60.0],
+            overall_level: 0.01,
+        };
+        block_on(opt.update_with_data(&metrics, &vib)).unwrap();
+        let params = opt.get_optimized_params();
+        assert!(params.max_jerk[0] < 15.0); // Should reduce jerk
+    }
 }

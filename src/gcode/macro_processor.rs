@@ -51,3 +51,48 @@ impl MacroProcessor {
         }
     }
 }
+
+// G-code macro processing and parsing stubs
+
+/// Placeholder for G-code macro context
+#[derive(Debug, Clone, Default)]
+pub struct MacroContextStub {
+    pub variables: std::collections::HashMap<String, String>,
+}
+
+/// Main macro processor struct (stub)
+pub struct MacroProcessorStub {
+    pub context: MacroContextStub,
+}
+
+impl MacroProcessorStub {
+    pub fn new() -> Self {
+        Self { context: MacroContextStub::default() }
+    }
+
+    /// Expand macros in a G-code line (stub)
+    pub fn expand_macros(&self, _line: &str) -> String {
+        // TODO: Implement macro expansion
+        _line.to_string()
+    }
+
+    /// Parse a G-code line (stub)
+    pub fn parse_gcode(&self, _line: &str) -> Option<GcodeCommandStub> {
+        // TODO: Implement full G-code parsing
+        None
+    }
+
+    /// Execute a parsed G-code command (stub)
+    pub fn execute_gcode(&self, _cmd: &GcodeCommandStub) {
+        // TODO: Implement G-code execution pipeline
+    }
+}
+
+/// Placeholder for a parsed G-code command
+#[derive(Debug, Clone, Default)]
+pub struct GcodeCommandStub {
+    pub code: String,
+    pub args: std::collections::HashMap<String, String>,
+}
+
+// TODO: Integrate MacroProcessorStub with print job and motion system when implemented.

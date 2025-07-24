@@ -74,9 +74,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
                     // Map to API response type
                     let response = web::models::PrinterStatusResponse {
                         status: if state.ready { "Idle".to_string() } else { "Not Ready".to_string() },
-                        position: (state.position[0], state.position[1], state.position[2]),
-                        hotend_temp: state.hotend_temp,
-                        target_hotend_temp: state.target_hotend_temp,
+                        position: (
+                            state.position[0] as f32,
+                            state.position[1] as f32,
+                            state.position[2] as f32
+                        ),
+                        hotend_temp: state.temperature as f32,
+                        target_hotend_temp: state.bed_temperature as f32,
                     };
                     let _ = respond_to.send(response);
                 }

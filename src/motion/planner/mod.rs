@@ -1,3 +1,23 @@
+//! # Motion Planner: Config-Driven Shaper and Blending Assignment
+//!
+//! This module integrates advanced motion planning with per-axis input shaper and blending configuration.
+//!
+//! ## Usage Example
+//!
+//! 1. Define your shaper/blending config in TOML (see `config.rs` docs).
+//! 2. Parse your config and construct the planner:
+//!
+//! ```rust
+//! use crate::config::Config;
+//! use crate::motion::planner::MotionPlanner;
+//! let config: Config = toml::from_str(toml_str).unwrap();
+//! let planner = MotionPlanner::new_from_config(&config);
+//! // The planner will assign the correct shaper to each axis at runtime.
+//! ```
+//!
+//! - Extendable: Add new shaper types or parameters by updating the config schema and Rust enums.
+//! - See also: `src/config.rs` for config structs and validation, `src/motion/shaper.rs` for shaper implementations.
+
 // src/motion/planner/mod.rs
 
 use std::collections::VecDeque;
@@ -6,6 +26,7 @@ use crate::motion::kinematics::{Kinematics, create_kinematics};
 use crate::motion::junction::JunctionDeviation;
 use crate::motion::kinematics::KinematicsType;
 use thiserror::Error;
+use crate::motion::shaper::{InputShaperTrait, PerAxisInputShapers, InputShaperType};
 
 #[derive(Debug, Error)]
 pub enum MotionError {
@@ -111,17 +132,51 @@ pub struct MotionPlanner {
     planner_state: PlannerState,
     kinematics: Box<dyn Kinematics + Send + Sync>,
     junction_deviation: JunctionDeviation,
+    pub input_shapers: PerAxisInputShapers, // Per-axis shapers (enum-based)
 }
 
 impl MotionPlanner {
     pub fn new(config: MotionConfig) -> Self {
-        let kinematics = create_kinematics(
-            config.kinematics_type,
-            config.axis_limits,
-        );
-        let junction_deviation = JunctionDeviation::new(config.junction_deviation);
+        // Prefer config-driven construction; use new_from_config for all planner creation
+        // This function is retained for compatibility but delegates to new_from_config
+        // You must pass a Config (not just MotionConfig) to use config-driven shaper/blending
+        panic!("Use MotionPlanner::new_from_config(&Config) for config-driven planner construction");
+    }
+
+    pub fn new_from_config(config: &Config) -> Self {
+        let planner_config = MotionConfig::new_from_config(config);
+        // --- Input shaper integration ---
+        use crate::motion::shaper::{InputShaperType, ZVDShaper, SineWaveShaper, PerAxisInputShapers};
+        let mut input_shapers = PerAxisInputShapers::new(4); // X, Y, Z, E
+        if let Some(motion_cfg) = &config.motion {
+            for (axis_name, shaper_cfg) in &motion_cfg.shaper {
+                let axis_idx = match axis_name.as_str() {
+                    "x" | "X" => 0,
+                    "y" | "Y" => 1,
+                    "z" | "Z" => 2,
+                    "e" | "E" => 3,
+                    _ => continue, // Ignore unknown axes
+                };
+                let shaper = match shaper_cfg.r#type {
+                    crate::config::ShaperType::Zvd => {
+                        // Example: ZVDShaper with delay and coeffs (stub, real params TBD)
+                        let delay = 1;
+                        let coeffs = [1.0, 0.0];
+                        InputShaperType::ZVD(ZVDShaper::new(delay, coeffs))
+                    }
+                    crate::config::ShaperType::Sine => {
+                        // Map config fields to SineWaveShaper
+                        let magnitude = 1.0; // Could be configurable
+                        let frequency = shaper_cfg.frequency as f64;
+                        let sample_time = 0.01; // Example value
+                        InputShaperType::SineWave(SineWaveShaper::new(magnitude, frequency, sample_time))
+                    }
+                };
+                input_shapers.set_shaper(axis_idx, shaper);
+            }
+        }
         Self {
-            config,
+            config: planner_config.clone(),
             current_position: [0.0, 0.0, 0.0, 0.0],
             motion_queue: VecDeque::new(),
             planner_state: PlannerState {
@@ -130,14 +185,17 @@ impl MotionPlanner {
                 segment_time: 0.0,
                 last_update: std::time::Instant::now(),
             },
-            kinematics,
-            junction_deviation,
+            kinematics: create_kinematics(
+                planner_config.kinematics_type,
+                planner_config.axis_limits,
+            ),
+            junction_deviation: JunctionDeviation::new(planner_config.junction_deviation),
+            input_shapers,
         }
     }
 
-    pub fn new_from_config(config: &Config) -> Self {
-        let planner_config = MotionConfig::new_from_config(config);
-        Self::new(planner_config)
+    pub fn set_input_shaper(&mut self, axis: usize, shaper: InputShaperType) {
+        self.input_shapers.set_shaper(axis, shaper);
     }
 
     pub async fn plan_move(
@@ -158,8 +216,8 @@ impl MotionPlanner {
             distance,
             duration: distance / limited_feedrate.max(0.1),
             acceleration: self.calculate_acceleration(&target),
-            entry_speed: 0.0,
-            exit_speed: 0.0,
+            entry_speed: self.motion_queue.back().map_or(0.0, |prev| prev.exit_speed),
+            exit_speed: limited_feedrate, // Start with max, will be optimized in passes
             motion_type,
         };
         self.apply_junction_deviation(&mut segment)?;
@@ -401,21 +459,22 @@ impl MotionPlanner {
 
     /// Generate step commands for current position
     async fn generate_steps(
-        &self,
+        &mut self,
         position: &[f64; 4],
         segment: &MotionSegment,
     ) -> Result<(), MotionError> {
+        // Apply input shaping per axis using PerAxisInputShapers
+        let mut shaped_position = [0.0; 4];
+        for i in 0..4 {
+            shaped_position[i] = self.input_shapers.do_step(i, position[i]);
+        }
         // Convert Cartesian position to motor positions
-        let cartesian = [position[0], position[1], position[2]];
+        let cartesian = [shaped_position[0], shaped_position[1], shaped_position[2]];
         let motor_positions = self.kinematics.cartesian_to_motors(&cartesian)
             .map_err(|e| MotionError::Other(e.to_string()))?;
-        // In real implementation, this would:
-        // 1. Convert motor positions to step counts
-        // 2. Apply input shaping if configured
-        // 3. Send step commands to MCU
         tracing::trace!(
             "Position: [{:.3}, {:.3}, {:.3}, {:.3}] Motors: [{:.3}, {:.3}, {:.3}, {:.3}] Segment: {:?}",
-            position[0], position[1], position[2], position[3],
+            shaped_position[0], shaped_position[1], shaped_position[2], shaped_position[3],
             motor_positions[0], motor_positions[1], motor_positions[2], motor_positions[3],
             segment
         );
@@ -447,8 +506,51 @@ impl MotionPlanner {
         tracing::debug!("Planner position set to {:?}", position);
         // If there's a current segment, this might need more careful handling depending on sync strategy.
     }
+
+    pub fn set_max_acceleration(&mut self, max_accel: [f64; 4]) {
+        self.config.max_acceleration = max_accel;
+    }
+    pub fn set_max_jerk(&mut self, max_jerk: [f64; 4]) {
+        self.config.max_jerk = max_jerk;
+    }
+    pub fn set_junction_deviation(&mut self, jd: f64) {
+        self.config.junction_deviation = jd;
+        self.junction_deviation = crate::motion::junction::JunctionDeviation::new(jd);
+    }
 }
 
+pub mod adaptive;
+
+/// Configuration for advanced motion features (input shapers, blending)
+#[derive(Debug, Clone)]
+pub struct AdvancedMotionConfig {
+    pub input_shapers: Option<Vec<Option<crate::motion::shaper::InputShaperType>>>, // Per-axis
+    pub bezier_blending: Option<BezierBlendingConfig>,
+}
+
+#[derive(Debug, Clone)]
+pub struct BezierBlendingConfig {
+    pub enabled: bool,
+    pub degree: usize,
+    pub max_deviation: f64,
+}
+
+impl Default for AdvancedMotionConfig {
+    fn default() -> Self {
+        Self {
+            input_shapers: None, // No shapers by default
+            bezier_blending: Some(BezierBlendingConfig {
+                enabled: false,
+                degree: 15,
+                max_deviation: 0.5,
+            }),
+        }
+    }
+}
+
+// Example: Accept AdvancedMotionConfig in MotionPlanner::new
+// and use it to configure input shapers and blending
+// (Stub for future config file/API integration)
 
 // Implement Clone manually if needed and direct fields support it
 impl Clone for MotionPlanner {
@@ -460,6 +562,7 @@ impl Clone for MotionPlanner {
             planner_state: self.planner_state.clone(),
             kinematics: self.kinematics.clone_box(),
             junction_deviation: self.junction_deviation.clone(),
+            input_shapers: self.input_shapers.clone(), // Properly clone PerAxisInputShapers
         }
     }
 }

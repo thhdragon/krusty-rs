@@ -130,7 +130,9 @@ mod tests {
     }
 
     fn create_mock_hardware_manager() -> HardwareManager {
-        // In a real test, you'd mock this properly
-        unimplemented!("Mock hardware manager for testing")
+        // Minimal stub for HardwareManager
+        struct DummyHardwareManager;
+        impl crate::hardware::HardwareManagerTrait for DummyHardwareManager {}
+        HardwareManager::default() // Or replace with DummyHardwareManager if needed
     }
 }

@@ -128,3 +128,39 @@ impl Clone for HardwareManager {
         }
     }
 }
+
+// --- Additional hardware abstraction stubs ---
+
+/// Placeholder for fan control
+#[derive(Debug, Clone, Default)]
+pub struct FanControllerStub {
+    pub speed: u8, // 0-255
+}
+
+impl FanControllerStub {
+    pub fn new() -> Self {
+        Self { speed: 0 }
+    }
+    pub fn set_speed(&mut self, speed: u8) {
+        // TODO: Implement real fan speed control
+        self.speed = speed;
+    }
+}
+
+/// Placeholder for generic sensor reading
+#[derive(Debug, Clone, Default)]
+pub struct GenericSensorStub {
+    pub value: f64,
+}
+
+impl GenericSensorStub {
+    pub fn new() -> Self {
+        Self { value: 0.0 }
+    }
+    pub fn read(&self) -> f64 {
+        // TODO: Implement real sensor reading
+        self.value
+    }
+}
+
+// TODO: Integrate FanControllerStub and GenericSensorStub with hardware manager when implemented.

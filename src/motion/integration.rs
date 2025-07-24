@@ -5,8 +5,8 @@ pub async fn test_advanced_motion_planning() -> Result<(), Box<dyn std::error::E
     tracing::info!("Testing advanced motion planning...");
     
     // Create advanced motion planner
-    let config = MotionConfig::default();
-    let mut planner = AdvancedMotionPlanner::new(config);
+    let config = crate::config::Config::default();
+    let mut planner = AdvancedMotionPlanner::new_from_config(&config);
     
     // Test complex motion sequence
     let moves = vec![

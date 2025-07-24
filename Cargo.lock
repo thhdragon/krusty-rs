@@ -449,6 +449,8 @@ name = "krusty-rs"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "futures-core",
+ "futures-util",
  "rand",
  "serde",
  "serde_json",
