@@ -16,7 +16,7 @@ pub enum PrinterError {
     #[error("Motion error: {0}")]
     Motion(#[from] crate::motion::MotionError),
     #[error("GCode error: {0}")]
-    GCode(#[from] crate::gcode::GCodeError),
+    GCode(#[from] crate::gcode::parser::GCodeError),
     #[error("Other: {0}")]
     Other(String),
 }

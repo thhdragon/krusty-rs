@@ -1,6 +1,6 @@
 use krusty_rs::print_job::{PrintJobManager, PrintJobError};
 use krusty_rs::GCodeCommand;
-use krusty_rs::gcode::GCodeError;
+use krusty_rs::gcode::parser::GCodeError;
 use tokio::sync::mpsc;
 
 fn dummy_command() -> Result<GCodeCommand<'static>, GCodeError> {

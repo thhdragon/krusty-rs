@@ -11,7 +11,7 @@ pub enum PrintJobError {
 // src/print_job.rs
 
 use crate::GCodeCommand;
-use crate::gcode::GCodeError;
+use crate::gcode::parser::GCodeError;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use futures_core::stream::Stream;
