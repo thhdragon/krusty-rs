@@ -9,7 +9,7 @@ use tokio::sync::RwLock;
 ///
 /// # Example
 /// ```rust
-/// use your_crate::gcode::macros::MacroProcessor;
+/// use krusty_rs::gcode::macros::MacroProcessor;
 /// use tokio::runtime::Runtime;
 /// let rt = Runtime::new().unwrap();
 /// rt.block_on(async {

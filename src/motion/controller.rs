@@ -7,12 +7,14 @@ use crate::motion::planner::MotionPlanner;
 use crate::motion::planner::adaptive::{PerformanceMonitor, VibrationAnalyzer, PerformanceMetrics, AdaptiveOptimizer, AdaptiveConfig};
 
 #[derive(Debug, Clone)]
+// MotionController struct definition follows
 pub enum MotionMode {
     Basic,
     Adaptive,
     SnapCrackle,
 }
 
+#[derive(Debug)]
 pub struct MotionController {
     state: Arc<RwLock<PrinterState>>,
     hardware_manager: HardwareManager,
@@ -27,6 +29,28 @@ pub struct MotionController {
 }
 
 impl MotionController {
+    /// For testing only: force the planner state to Running
+    pub fn set_queue_running_for_test(&mut self) {
+        self.planner.set_running();
+    }
+    pub fn get_current_position(&self) -> [f64; 4] {
+        self.current_position
+    }
+    pub fn pause_queue(&mut self) -> Result<(), crate::motion::planner::MotionError> {
+        self.planner.pause()
+    }
+
+    pub fn resume_queue(&mut self) -> Result<(), crate::motion::planner::MotionError> {
+        self.planner.resume()
+    }
+
+    pub fn cancel_queue(&mut self) -> Result<(), crate::motion::planner::MotionError> {
+        self.planner.cancel()
+    }
+
+    pub fn get_queue_state(&self) -> crate::motion::planner::MotionQueueState {
+        self.planner.get_state()
+    }
     pub fn new(
         state: Arc<RwLock<PrinterState>>,
         hardware_manager: HardwareManager,

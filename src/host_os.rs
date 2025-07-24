@@ -5,6 +5,7 @@ use crate::printer::Printer;
 use crate::config::Config;
 use crate::gcode::GCodeProcessor;
 use crate::motion::MotionController;
+use crate::motion::controller::MotionMode;
 use crate::PlannerMotionConfig;
 use crate::hardware::HardwareManager;
 use crate::web::WebInterface;
@@ -63,6 +64,7 @@ impl PrinterHostOS {
         let motion_controller = Arc::new(RwLock::new(MotionController::new(
             state.clone(),
             hardware_manager.clone(),
+            MotionMode::Basic, // Or choose based on config
             &config,
         )));
 
@@ -382,7 +384,11 @@ impl PrinterHostOS {
     /// Get motion queue statistics
     pub async fn get_motion_stats(&self) -> crate::motion::QueueStats {
         let controller = self.motion_controller.read().await;
-        controller.get_queue_stats()
+        crate::motion::QueueStats {
+            length: controller.get_queue_length(),
+            max_length: 0, // TODO: track max length if needed
+            last_command: None, // TODO: track last command if needed
+        }
     }
 
     /// Emergency stop

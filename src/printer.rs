@@ -6,6 +6,7 @@ use thiserror::Error;
 use crate::config::Config;
 use crate::gcode::GCodeProcessor;
 use crate::motion::MotionController;
+use crate::motion::controller::MotionMode;
 use crate::hardware::HardwareManager;
 
 #[derive(Debug, Error)]
@@ -65,7 +66,7 @@ impl Printer {
         let state = Arc::new(RwLock::new(PrinterState::new()));
         let (shutdown_tx, _) = broadcast::channel(1);
         let hardware_manager = HardwareManager::new(config.clone());
-        let motion_controller = Arc::new(RwLock::new(MotionController::new(state.clone(), hardware_manager.clone(), &config)));
+        let motion_controller = Arc::new(RwLock::new(MotionController::new(state.clone(), hardware_manager.clone(), MotionMode::Basic, &config)));
         let gcode_processor = GCodeProcessor::new(state.clone(), motion_controller.clone());
 
         if config.printer.printer_name.as_deref().unwrap_or("").is_empty() {

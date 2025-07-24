@@ -2,9 +2,50 @@
 
 #[cfg(test)]
 mod tests {
+
+    #[tokio::test]
+    async fn test_queue_pause_resume_cancel() {
+        let config = create_test_config();
+        let state = Arc::new(RwLock::new(PrinterState {
+            ready: false,
+            position: [0.0, 0.0, 0.0],
+            temperature: 0.0,
+            bed_temperature: 0.0,
+            print_progress: 0.0,
+            paused: false,
+            printing: false,
+        }));
+        let hardware_manager = create_mock_hardware_manager(&config);
+        let mut controller = MotionController::new(
+            state,
+            hardware_manager,
+            MotionMode::Basic,
+            &config,
+        );
+        // Queue a move
+        controller.queue_linear_move([10.0, 0.0, 0.0], Some(100.0), None).await.unwrap();
+        controller.set_queue_running_for_test(); // Simulate update loop
+        assert_eq!(controller.get_queue_length(), 1);
+        // Pause the queue
+        assert!(controller.pause_queue().is_ok());
+        assert_eq!(format!("{:?}", controller.get_queue_state()), "Paused");
+        // Try to pause again (should error)
+        assert!(controller.pause_queue().is_err());
+        // Resume the queue
+        assert!(controller.resume_queue().is_ok());
+        assert_eq!(format!("{:?}", controller.get_queue_state()), "Running");
+        // Try to resume again (should error)
+        assert!(controller.resume_queue().is_err());
+        // Cancel the queue
+        assert!(controller.cancel_queue().is_ok());
+        assert_eq!(format!("{:?}", controller.get_queue_state()), "Cancelled");
+        // Try to cancel again (should error)
+        assert!(controller.cancel_queue().is_err());
+    }
     use std::sync::Arc;
     use tokio::sync::RwLock;
     use krusty_rs::{PrinterState, HardwareManager, Config, MotionConfig, MotionController};
+    use krusty_rs::motion::controller::MotionMode;
 
     #[tokio::test]
     async fn test_motion_controller_creation() {
@@ -22,6 +63,7 @@ mod tests {
         let controller = MotionController::new(
             state,
             hardware_manager,
+            MotionMode::Basic,
             &config,
         );
         // If new() returns the controller directly, just assert type
@@ -44,6 +86,7 @@ mod tests {
         let mut controller = MotionController::new(
             state,
             hardware_manager,
+            MotionMode::Basic,
             &config,
         );
         let result = controller.queue_linear_move(
@@ -52,7 +95,7 @@ mod tests {
             Some(5.0),
         ).await;
         assert!(result.is_ok());
-        assert_eq!(controller.get_queue_stats().length, 1);
+        assert_eq!(controller.get_queue_length(), 1);
     }
 
     #[tokio::test]
@@ -71,13 +114,14 @@ mod tests {
         let mut controller = MotionController::new(
             state,
             hardware_manager,
+            MotionMode::Basic,
             &config,
         );
         controller.queue_linear_move([10.0, 0.0, 0.0], Some(100.0), None).await.unwrap();
         controller.queue_linear_move([20.0, 0.0, 0.0], Some(100.0), None).await.unwrap();
-        assert_eq!(controller.get_queue_stats().length, 2);
+        assert_eq!(controller.get_queue_length(), 2);
         controller.emergency_stop();
-        assert_eq!(controller.get_queue_stats().length, 0);
+        assert_eq!(controller.get_queue_length(), 0);
     }
 
     fn create_test_config() -> Config {

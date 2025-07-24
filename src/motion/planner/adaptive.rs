@@ -78,6 +78,7 @@ pub struct ResonancePeak {
 // --- Main Adaptive Optimizer Logic ---
 // (This will require significant fixes for the errors seen)
 
+#[derive(Debug)]
 pub struct AdaptiveOptimizer {
     performance_history: VecDeque<PerformanceData>,
     optimization_params: OptimizationParams,
@@ -355,6 +356,7 @@ pub struct TrainingSample {
 
 // --- PerformanceMonitor struct for tracking performance metrics ---
 
+#[derive(Debug)]
 pub struct PerformanceMonitor {
     buffer: VecDeque<PerformanceMetrics>,
     buffer_size: usize,
@@ -434,6 +436,7 @@ pub struct VibrationAnalysis {
 
 // --- VibrationAnalyzer struct for analyzing vibrations ---
 
+#[derive(Debug)]
 pub struct VibrationAnalyzer {
     sample_rate: f64,
     analysis_window: usize,

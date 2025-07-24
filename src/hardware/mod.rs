@@ -24,10 +24,19 @@ pub enum HardwareError {
     Utf8(#[from] std::string::FromUtf8Error),
 }
 
+
+/// HardwareManager is NOT thread-safe and is intended for single-task async use only.
+///
+/// - Do not share across threads or await points without external synchronization.
+/// - All async methods must be called from a single async task.
+/// - If multi-threaded or multi-task access is needed, wrap in a `tokio::sync::Mutex` or similar.
+/// - The underlying serial port is not `Send + Sync`.
 #[derive(Debug)]
 pub struct HardwareManager {
     config: Config,
     serial: Option<SerialStream>,
+    pub fan: FanController,
+    pub sensor: GenericSensor,
 }
 
 impl HardwareManager {
@@ -35,6 +44,8 @@ impl HardwareManager {
         Self {
             config,
             serial: None,
+            fan: FanController::new(),
+            sensor: GenericSensor::new(),
         }
     }
 
@@ -128,11 +139,13 @@ impl HardwareManager {
     }
 
     /// Stub: Set heater temperature (async)
-    pub async fn set_heater_temperature(&self, _name: &str, _temp: f64) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn set_heater_temperature(&self, _name: &str, _temp: f64) -> Result<(), HardwareError> {
+        // TODO: Implement real heater control
         Ok(())
     }
 
-    pub async fn process_responses(&self) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn process_responses(&self) -> Result<(), HardwareError> {
+        // TODO: Implement real response processing
         Ok(())
     }
 }
@@ -151,42 +164,64 @@ impl Clone for HardwareManager {
         Self {
             config: self.config.clone(),
             serial: None, // Can't clone the serial connection, so start fresh
+            fan: self.fan.clone(),
+            sensor: self.sensor.clone(),
         }
     }
 }
 
 // --- Additional hardware abstraction stubs ---
 
-/// Placeholder for fan control
-#[derive(Debug, Clone, Default)]
-pub struct FanControllerStub {
-    pub speed: u8, // 0-255
+
+/// Fan controller abstraction (stub or real)
+#[derive(Debug, Clone)]
+pub struct FanController {
+    speed: u8, // 0-255
 }
 
-impl FanControllerStub {
+#[derive(Debug, thiserror::Error)]
+pub enum FanError {
+    #[error("Invalid speed: {0}")]
+    InvalidSpeed(u8),
+}
+
+impl FanController {
     pub fn new() -> Self {
         Self { speed: 0 }
     }
-    pub fn set_speed(&mut self, speed: u8) {
+    pub fn set_speed(&mut self, speed: u8) -> Result<(), FanError> {
         // TODO: Implement real fan speed control
         self.speed = speed;
+        Ok(())
+    }
+    pub fn get_speed(&self) -> u8 {
+        self.speed
     }
 }
 
-/// Placeholder for generic sensor reading
-#[derive(Debug, Clone, Default)]
-pub struct GenericSensorStub {
-    pub value: f64,
+/// Generic sensor abstraction (stub or real)
+#[derive(Debug, Clone)]
+pub struct GenericSensor {
+    value: f64,
 }
 
-impl GenericSensorStub {
+#[derive(Debug, thiserror::Error)]
+pub enum SensorError {
+    #[error("Sensor read error")]
+    ReadError,
+}
+
+impl GenericSensor {
     pub fn new() -> Self {
         Self { value: 0.0 }
     }
-    pub fn read(&self) -> f64 {
+    pub fn set_value(&mut self, value: f64) {
+        self.value = value;
+    }
+    pub fn read(&self) -> Result<f64, SensorError> {
         // TODO: Implement real sensor reading
-        self.value
+        Ok(self.value)
     }
 }
 
-// TODO: Integrate FanControllerStub and GenericSensorStub with hardware manager when implemented.
+// TODO: Integrate FanController and GenericSensor with HardwareManager for testability and future hardware support.

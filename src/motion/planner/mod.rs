@@ -1,22 +1,27 @@
-//! # Motion Planner: Config-Driven Shaper and Blending Assignment
-//!
-//! This module integrates advanced motion planning with per-axis input shaper and blending configuration.
-//!
-//! ## Usage Example
-//!
-//! 1. Define your shaper/blending config in TOML (see `config.rs` docs).
-//! 2. Parse your config and construct the planner:
-//!
-//! ```rust
-//! use crate::config::Config;
-//! use crate::motion::planner::MotionPlanner;
-//! let config: Config = toml::from_str(toml_str).unwrap();
-//! let planner = MotionPlanner::new_from_config(&config);
-//! // The planner will assign the correct shaper to each axis at runtime.
-//! ```
-//!
-//! - Extendable: Add new shaper types or parameters by updating the config schema and Rust enums.
-//! - See also: `src/config.rs` for config structs and validation, `src/motion/shaper.rs` for shaper implementations.
+#[derive(Debug, Clone, PartialEq)]
+pub enum MotionQueueState {
+    Idle,
+    Running,
+    Paused,
+    Cancelled,
+}
+// # Motion Planner: Config-Driven Shaper and Blending Assignment
+//
+// This module integrates advanced motion planning with per-axis input shaper and blending configuration.
+//
+// ## Usage Example
+//
+// 1. Define your shaper/blending config in TOML (see `config.rs` docs).
+// 2. Parse your config and construct the planner:
+//
+// use crate::config::Config;
+// use crate::motion::planner::MotionPlanner;
+// let config: Config = toml::from_str(toml_str).unwrap();
+// let planner = MotionPlanner::new_from_config(&config);
+// // The planner will assign the correct shaper to each axis at runtime.
+//
+// - Extendable: Add new shaper types or parameters by updating the config schema and Rust enums.
+// - See also: `src/config.rs` for config structs and validation, `src/motion/shaper.rs` for shaper implementations.
 
 // src/motion/planner/mod.rs
 
@@ -133,6 +138,7 @@ pub struct MotionPlanner {
     kinematics: Box<dyn Kinematics + Send + Sync>,
     junction_deviation: JunctionDeviation,
     pub input_shapers: PerAxisInputShapers, // Per-axis shapers (enum-based)
+    state: MotionQueueState,
 }
 
 impl MotionPlanner {
@@ -191,7 +197,54 @@ impl MotionPlanner {
             ),
             junction_deviation: JunctionDeviation::new(planner_config.junction_deviation),
             input_shapers,
+            state: MotionQueueState::Idle,
         }
+    }
+
+    pub fn pause(&mut self) -> Result<(), MotionError> {
+        match self.state {
+            MotionQueueState::Running => {
+                self.state = MotionQueueState::Paused;
+                tracing::info!("Motion queue paused");
+                Ok(())
+            }
+            MotionQueueState::Paused => Err(MotionError::Other("Queue is already paused".to_string())),
+            MotionQueueState::Idle => Err(MotionError::Other("Queue is idle, nothing to pause".to_string())),
+            MotionQueueState::Cancelled => Err(MotionError::Other("Queue is cancelled, cannot pause".to_string())),
+        }
+    }
+
+    pub fn resume(&mut self) -> Result<(), MotionError> {
+        match self.state {
+            MotionQueueState::Paused => {
+                self.state = MotionQueueState::Running;
+                tracing::info!("Motion queue resumed");
+                Ok(())
+            }
+            MotionQueueState::Running => Err(MotionError::Other("Queue is already running".to_string())),
+            MotionQueueState::Idle => Err(MotionError::Other("Queue is idle, nothing to resume".to_string())),
+            MotionQueueState::Cancelled => Err(MotionError::Other("Queue is cancelled, cannot resume".to_string())),
+        }
+    }
+
+    pub fn cancel(&mut self) -> Result<(), MotionError> {
+        match self.state {
+            MotionQueueState::Cancelled => Err(MotionError::Other("Queue is already cancelled".to_string())),
+            _ => {
+                self.state = MotionQueueState::Cancelled;
+                self.clear_queue();
+                tracing::warn!("Motion queue cancelled and cleared");
+                Ok(())
+            }
+        }
+    }
+
+    pub fn set_running(&mut self) {
+        self.state = MotionQueueState::Running;
+    }
+
+    pub fn get_state(&self) -> MotionQueueState {
+        self.state.clone()
     }
 
     pub fn set_input_shaper(&mut self, axis: usize, shaper: InputShaperType) {
@@ -407,6 +460,25 @@ impl MotionPlanner {
 
     /// Main update function - called at high frequency
     pub async fn update(&mut self) -> Result<(), MotionError> {
+        // Respect queue state
+        match self.state {
+            MotionQueueState::Paused => {
+                // Do nothing, hold current segment/queue
+                return Ok(());
+            }
+            MotionQueueState::Cancelled => {
+                // Already cleared, set to Idle
+                self.state = MotionQueueState::Idle;
+                return Ok(());
+            }
+            MotionQueueState::Idle => {
+                // Do nothing if idle
+                return Ok(());
+            }
+            MotionQueueState::Running => {
+                // Continue as normal
+            }
+        }
         let now = std::time::Instant::now();
         let dt = (now - self.planner_state.last_update).as_secs_f64();
         self.planner_state.last_update = now;
@@ -416,8 +488,10 @@ impl MotionPlanner {
                 self.planner_state.current_segment = Some(segment);
                 self.planner_state.segment_time = 0.0;
                 self.planner_state.active = true;
+                self.state = MotionQueueState::Running;
             } else {
                 self.planner_state.active = false;
+                self.state = MotionQueueState::Idle;
                 return Ok(());
             }
         }
@@ -567,6 +641,7 @@ impl Clone for MotionPlanner {
             kinematics: self.kinematics.clone_box(),
             junction_deviation: self.junction_deviation.clone(),
             input_shapers: self.input_shapers.clone(), // Properly clone PerAxisInputShapers
+            state: self.state.clone(),
         }
     }
 }
@@ -580,6 +655,7 @@ impl std::fmt::Debug for MotionPlanner {
             .field("planner_state", &self.planner_state)
             .field("kinematics", &"Box<dyn Kinematics + Send>")
             .field("junction_deviation", &self.junction_deviation)
+            .field("state", &self.state)
             .finish()
     }
 }

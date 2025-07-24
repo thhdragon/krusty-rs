@@ -25,7 +25,17 @@
 //! ## Example: Rust Usage
 //!
 //! ```rust
-//! use crate::config::Config;
+//! use krusty_rs::config::Config;
+//! let toml_str = r#"
+//! [motion.shaper.x]
+//! type = "zvd"
+//! frequency = 40.0
+//! damping = 0.1
+//!
+//! [motion.blending]
+//! type = "bezier"
+//! max_deviation = 0.2
+//! "#;
 //! let config: Config = toml::from_str(toml_str).unwrap();
 //! let motion = config.motion.as_ref().unwrap();
 //! assert_eq!(motion.shaper["x"].frequency, 40.0);

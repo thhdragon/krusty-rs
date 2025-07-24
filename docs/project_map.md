@@ -73,7 +73,14 @@ Krusty-rs is a modular, async Rust-based 3D printer host and motion control syst
 
 ## TODO SECTION
 
-**Status:** All advanced motion planning and input shaping features are implemented, integrated, and validated with unit tests as of July 2025. See the section below for details.
+**Status (July 2025):**
+- Advanced motion planning (G⁴, Bézier blending, input shaping) is implemented and validated with unit tests, but some advanced features (vibration cancellation, higher-order controller, optimizer) remain stubbed in `snap_crackle.rs`.
+- Print job management is mostly stubbed; queueing, pausing, resuming, and cancellation are not implemented.
+- G-code macro/streaming parsing and error recovery are incomplete; integration with print job and motion system is partial.
+- Web API is minimal; advanced endpoints (pause, resume, cancel, logs, streaming) and authentication are missing.
+- Hardware abstraction is limited to temperature/stepper; other peripherals are not abstracted.
+- Host OS abstraction is stubbed; no real serial protocol, time sync, or event system.
+- Error handling is basic in many modules; more robust enums and diagnostics are needed.
 
 **Completed Steps:**
 - Studied Prunt3D’s G⁴ motion profile and Bézier-based corner blending for inspiration; implemented and refined advanced motion planning in `motion/shaper.rs` and `motion/planner/snap_crackle.rs`.
@@ -81,89 +88,50 @@ Krusty-rs is a modular, async Rust-based 3D printer host and motion control syst
 - Reviewed and adapted Prunt3D’s open-source code for implementation details.
 
 **Next Steps:**
-- **Extend analytical solutions for G⁴ and Bézier blending:**
-  - [x] Research analytical solutions for phase duration and evaluation in G⁴ profiles (see Prunt3D docs and academic literature)
-  - [x] Implement or improve analytical/iterative solvers in `motion/planner/snap_crackle.rs` (root-based constraint limiting, inspired by Prunt3D)
-  - [x] Add/expand unit tests for edge cases and performance
-  - [x] Document mathematical approach and solver limitations (see Technical Notes below and doc comment at the top of `src/motion/planner/snap_crackle.rs`)
-- **Integrate shaper/blending config into user-facing config or API:**
-  - [x] Design config schema for per-axis shaper and blending options (TOML or API)
-    
-    **Proposed TOML schema:**
-    ```toml
-    [motion.shaper.x]
-    type = "zvd"
-    frequency = 40.0
-    damping = 0.1
 
-    [motion.shaper.y]
-    type = "sine"
-    frequency = 35.0
+```markdown
+## Updated TODOs and Action Items (July 2025)
 
-    [motion.blending]
-    type = "bezier"
-    max_deviation = 0.2
-    ```
-    - Each axis (x, y, z, etc.) can have its own shaper type and parameters.
-    - Blending (corner smoothing) is configured globally or per-axis as needed.
+## Updated TODOs and Action Items (July 2025)
 
-    **Rust struct/enums for config parsing:**
-    ```rust
-    use serde::Deserialize;
-    use std::collections::HashMap;
+**Focus: Build the Base System**
 
-    #[derive(Debug, Deserialize)]
-    #[serde(rename_all = "lowercase")]
-    pub enum ShaperType {
-        Zvd,
-        Sine,
-        // Add more as needed
-    }
+- [ ] Motion system:
+  - [ ] Implement basic move queueing and execution in `motion/controller.rs` and `motion/planner/mod.rs`.
+  - [ ] Ensure the printer can move reliably with simple G-code (G0/G1).
+  - [ ] Integrate motion system with hardware abstraction (stepper, temperature).
+  - [ ] Add basic error handling and diagnostics for motion failures.
+- [ ] Print job management:
+  - [ ] Implement job queueing, pausing, resuming, and cancellation in `print_job.rs`.
+  - [ ] Integrate print job state with G-code streaming and error recovery.
+- [ ] G-code macro/streaming parsing:
+  - [ ] Complete async/streaming parsing and macro expansion in `gcode/macros.rs` and `gcode/parser.rs`.
+  - [ ] Implement robust error recovery (skip to next line on error, span info).
+  - [ ] Integrate macro expansion with print job and motion system.
+- [ ] Web API:
+  - [ ] Add endpoints for pause, resume, cancel, and basic status.
+  - [ ] Implement minimal authentication (API key or JWT).
+- [ ] Hardware abstraction:
+  - [ ] Modularize hardware interfaces for stepper and temperature.
+  - [ ] Integrate and test with main workflow.
+- [ ] Host OS abstraction:
+  - [ ] Implement serial protocol (frame parsing, CRC, async I/O).
+  - [ ] Integrate with motion, hardware, and web modules.
+- [ ] Error handling:
+  - [ ] Refactor to use robust error enums (`thiserror`), propagate with `?`, add context.
+  - [ ] Ensure all errors include span/location info for diagnostics and web API.
+- [ ] Testing:
+  - [ ] Increase unit/integration test coverage for all modules, especially error and edge cases.
+  - [ ] Validate with simulated and real hardware; automate result collection and reporting.
 
-    #[derive(Debug, Deserialize)]
-    pub struct AxisShaperConfig {
-        pub r#type: ShaperType,
-        pub frequency: f32,
-        pub damping: Option<f32>,
-    }
+---
 
-    #[derive(Debug, Deserialize)]
-    #[serde(rename_all = "lowercase")]
-    pub enum BlendingType {
-        Bezier,
-        // Add more as needed
-    }
-
-    #[derive(Debug, Deserialize)]
-    pub struct BlendingConfig {
-        pub r#type: BlendingType,
-        pub max_deviation: f32,
-    }
-
-    #[derive(Debug, Deserialize)]
-    pub struct MotionConfig {
-        pub shaper: HashMap<String, AxisShaperConfig>,
-        pub blending: Option<BlendingConfig>,
-    }
-    ```
-    - This approach uses enums for shaper/blending types and a map for per-axis configs, following [serde](https://docs.rs/toml/latest/toml/) and [Stack Overflow best practices](https://stackoverflow.com/questions/47785720/deserialize-toml-string-to-enum-using-config-rs).
-    - See also Klipper and Prunt3D config examples for real-world reference.
-  - [x] Implement config parsing and validation in `config.rs`
-  - [x] Wire config into planner and shaper assignment logic
-  - [x] Add documentation and usage examples for shaper/blending config
-
-**How to use advanced shaper/blending config:**
-- See the top of `src/config.rs` for TOML and Rust usage examples.
-- See the top of `src/motion/planner/mod.rs` for planner integration and assignment logic.
-- The planner will automatically assign the correct shaper to each axis at runtime based on your config.
-
-  - [x] Continue real/simulated scenario validation:**
-  - [x] Develop or expand simulation harness for motion profiles and shaper effects
-  - [x] Collect and analyze results for various printer setups
-  - [x] Tune parameters and document best practices
+**Note:**
+Advanced features such as vibration cancellation, higher-order controller, optimizer, advanced input shaping, multi-axis optimization, and hardware-accelerated step generation have been moved to `future_map.md` for tracking after the base system is functional.
+```
 
 **Technical Notes:**
-- The G⁴ (31-phase) solver uses a root-based constraint limiting approach, inspired by Prunt3D's open-source planner. Each kinematic constraint (velocity, acceleration, jerk, snap, crackle) is applied using the appropriate root (e.g., a_max^(1/2), j_max^(1/3), s_max^(1/4), c_max^(1/5)), and the minimum is used for safe phase duration calculation. This ensures that no constraint is violated during the motion segment.
+- The G⁴ (31-phase) solver uses a root-based constraint limiting approach, inspired by Prunt3D's open-source planner. Each kinematic constraint (velocity, acceleration, jerk, snap, crackle) is applied using the appropriate root (e.g., a_max^(1/2), j_max^(1/3), s_max^(1/4), c_max^(1/5)), and the minimum is used for safe phase duration calculation. This ensures that no constraint is violated during the motion segment. REFERENCE KRUSTY-RS/SIM/PRUNT/SRC/
 - **Mathematical rationale:** For a motion profile limited by multiple derivatives, the maximum feasible velocity is determined by the most restrictive constraint. For example, the maximum velocity for a given acceleration limit is v = sqrt(a_max), for jerk it's v = j_max^(1/3), and so on. The solver computes all such limits and uses the minimum for planning.
 - **Bézier blending:** Advanced corner blending is achieved using degree-15 Bézier curves, ensuring smooth transitions with bounded higher-order derivatives (jerk, snap, crackle).
 - **Input shaping:** Per-axis input shapers (e.g., ZVD, Sine) are supported for vibration reduction, with configuration and assignment handled in the planner.
@@ -240,59 +208,48 @@ All core adaptive motion planning features are implemented, fully integrated, an
 - **Configuration:**
   - Configurable via `AdaptiveConfig` (see `planner/adaptive.rs`), with parameters for adaptation rate, learning rate, buffer size, and thresholds.
   - Optimizer can be enabled by setting the motion controller to `Adaptive` mode.
-- **Integration Points:**
-  - Motion controller (`controller.rs`) holds an optional `AdaptiveOptimizer` and updates it after each move.
-  - Optimizer’s parameters are applied to the planner before planning each move using setter methods.
-- **Next Steps:**
-  - [ ] Expand real-world and simulated validation for a wider range of printer setups and feedback scenarios
-    - **Best Practices and Plan:**
-      - Expand the simulation harness (`motion/benchmark.rs`) to support:
+
+**Status (July 2025, Deep Dive):**
+- Advanced motion planning (G⁴, Bézier blending, input shaping, adaptive optimizer) is implemented and validated with unit tests. Stubs remain for vibration cancellation, higher-order controller, and optimizer in `snap_crackle.rs`.
+- Print job management (`print_job.rs`) has a `PrintJobManager` with stubs for queue, pause, resume, and cancel, but logic is minimal and not fully integrated.
+- G-code macro/streaming parsing and error recovery are advanced (async, macro expansion, error types, trait-based extensibility), but integration with print job and motion system is partial and error recovery is not robust.
+- Web API exposes basic endpoints via Axum, but advanced endpoints (pause, resume, cancel, logs, streaming) and authentication are missing.
+- Hardware abstraction now includes fans and generic sensors, but only temperature and stepper logic are fully implemented and tested; other peripherals are present but not fully integrated.
+- Host OS abstraction (`host_os.rs`) is architected for extensibility (serial protocol, time sync, event bus, multi-MCU), but all features are stubbed and not active.
+- Error handling is improved in some modules (custom enums, `thiserror`), but not all errors are robustly typed or contextualized; some modules still use `Box<dyn Error>`.
+- Simulation harness and benchmark tests support parameter sweeps and scenario analysis for shaper/blending, but are not integrated into CI.
+- Config system supports per-axis shaper/blending, validation, and error enums, but live reload and schema documentation are incomplete.
         - Configurable printer and planner parameters via TOML/JSON (see Prunt3D `prunt_sim.toml` for reference)
         - Injection of disturbances (oscillating substrate, random noise, feedback delay)
-        - Configurable feedback models (ideal, noisy, delayed)
-        - Output of quantitative metrics (path deviation, vibration, error rates) in CSV or similar format
-        - Scripts or tools for plotting and analyzing results
-      - Add test cases for a variety of printer setups and disturbance scenarios
-      - Integrate support for real-time sensor feedback (e.g., accelerometer, laser displacement) in the motion controller for hardware validation
-      - Benchmark adaptive (closed-loop) vs. open-loop (non-adaptive) planning in both simulation and hardware
       - Automate result collection and reporting; document all scenarios, parameters, and results for reproducibility
       - Reference: [Prunt3D Simulator](https://github.com/Prunt3D/prunt_simulator), [ScienceDirect: Closed-loop controlled conformal 3D printing](https://www.sciencedirect.com/science/article/pii/S1526612523000282)
   - [ ] Tune adaptation heuristics and thresholds for optimal print quality and stability
     - **Best Practices and Plan:**
       - Begin with conservative adaptation and learning rates in `AdaptiveConfig` (see `planner/adaptive.rs`).
-      - Use the simulation harness to perform parameter sweeps for adaptation rate, learning rate, and thresholds.
       - Monitor quantitative metrics (path deviation, vibration amplitude, print quality, error rates) during tuning.
       - Gradually increase adaptation aggressiveness while checking for instability or overshoot.
-      - Validate tuned parameters on a variety of print scenarios (different geometries, speeds, and disturbances).
       - Document tuned parameters and rationale for each hardware setup in the codebase and project docs.
       - Reference: [Klipper Input Shaping Guide](https://www.klipper3d.org/Resonance_Compensation.html), [Prunt3D Features](https://prunt3d.com/docs/features/), [Machine learning-driven 3D printing: A review](https://www.sciencedirect.com/science/article/pii/S2352940724002518)
-  - [ ] Document best practices and usage for enabling and configuring adaptive motion planning
     - **Best Practices and Usage:**
       - To enable adaptive motion planning, set the motion controller mode to `Adaptive` in your config (see `planner/adaptive.rs`).
       - Expose and document all key parameters in your config file (TOML):
         - `adaptation_rate`: How quickly the optimizer responds to feedback (start low, increase as needed).
         - `learning_rate`: Controls the magnitude of parameter updates (start with a small value).
-        - `buffer_size`: Number of recent feedback samples to average (larger = smoother, smaller = more responsive).
         - `thresholds`: Limits for triggering adaptation (e.g., vibration, error, or deviation thresholds).
       - Example TOML config:
-        ```toml
         [motion.adaptive]
         enabled = true
         adaptation_rate = 0.05
-        learning_rate = 0.01
         buffer_size = 10
         vibration_threshold = 0.2
         error_threshold = 0.05
         ```
-      - Example Rust usage:
         ```rust
         let adaptive_config = AdaptiveConfig {
             enabled: true,
-            adaptation_rate: 0.05,
             learning_rate: 0.01,
             buffer_size: 10,
             vibration_threshold: 0.2,
-            error_threshold: 0.05,
         };
         let mut controller = MotionController::new();
         controller.set_adaptive_config(adaptive_config);
@@ -358,34 +315,37 @@ All planned host OS abstraction features are stubbed and documented in `src/host
 
 ## Recommendations
 
-- **Expand G-code parsing and execution pipeline:**
-  - [ ] Implement full G-code parsing and streaming (see `gcode/macros.rs`, `gcode/parser.rs`)
-  - [ ] Integrate macro expansion and execution pipeline with print job and motion system
-  - [ ] Add comprehensive tests for edge cases and error handling (invalid macros, nested macros, malformed G-code)
-  - [ ] Refactor for async/streaming parsing and non-blocking macro expansion (see latest Rust async best practices)
-  - [ ] Implement robust error recovery: on parse error, skip to next line before resuming parsing (prevents cascading errors)
-  - [ ] Ensure all errors include span/location info for diagnostics and web API reporting
-  - [ ] Document parser and macro processor usage, extension points, and limitations (add examples in code and docs)
 
-- **Add more comprehensive tests, especially for edge cases and error handling:**
-  - [ ] Increase unit/integration test coverage in all motion, hardware, and G-code modules
-  - [ ] Add tests for error conditions, invalid configs, and hardware failures
-  - [ ] Validate with simulated and real hardware (document test scenarios and results)
+## Best Practices and Recommendations (2025)
 
-- **Expand web API for richer printer control and monitoring:**
-  - [ ] Add endpoints for printer control, monitoring, and streaming (pause, resume, cancel, status, logs)
-  - [ ] Implement authentication and access control (JWT, API keys, or OAuth)
-  - [ ] Document API usage and add OpenAPI spec if possible (generate from Axum routes)
+- **Async Rust:**
+  - Use structured concurrency; tie task lifetimes to parent scopes, avoid detached tasks.
+  - Minimize async locks; prefer channels or lock-free patterns for coordination.
+  - Use `tokio` or `async-std` for async runtimes; Embassy for embedded.
+  - Avoid `.await` in critical sections or while holding locks.
+  - Use `tracing` for async-aware logging and diagnostics.
 
-- **Refactor and document hardware abstraction for extensibility:**
-  - [ ] Modularize hardware interfaces (see `hardware/mod.rs`)
-  - [ ] Add support for additional peripherals (fans, sensors, power control, etc.)
-  - [ ] Improve inline and module-level documentation (usage, extension, and safety notes)
+- **Error Handling:**
+  - Use `Result<T, E>` for recoverable errors, `Option<T>` for optional values.
+  - Use `thiserror` for custom error enums, `anyhow` for application-level errors.
+  - Avoid panics except for unrecoverable bugs; never panic on user input or I/O.
+  - Propagate errors with `?`, add context with `.context()`.
+  - Ensure all errors include span/location info for diagnostics and web API.
 
-- **Remove or refactor unused code and stubs as features are completed:**
-  - [ ] Identify and remove obsolete stubs (see `integration_test.rs`, `motion/benchmark.rs`, etc.)
-  - [ ] Refactor placeholder code as features are implemented (replace stubs with real logic)
-  - [ ] Keep this document and TODOs up to date (review after each major feature or refactor)
+- **3D Printer Host & Motion Planning:**
+  - Modular, hardware-agnostic design; support for hybrid/multi-material and large-scale printing.
+  - Real-time feedback and adaptive planning (AI/ML for tuning).
+  - Advanced motion planners: lookahead, jerk/snap/crackle limiting, input shaping.
+  - Simulation harnesses for parameter tuning and validation.
+  - Secure, extensible web APIs (authentication, streaming, OpenAPI).
+
+- **Testing:**
+  - Write isolated, deterministic tests for error and edge cases.
+  - Automate result collection and reporting; validate with simulated and real hardware.
+
+- **Documentation:**
+  - Keep this document and inline code comments up to date after each major feature or refactor.
+  - Document rationale for parameter choices and best practices for tuning.
 
 ---
 
