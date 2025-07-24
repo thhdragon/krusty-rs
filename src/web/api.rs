@@ -19,7 +19,6 @@ use crate::web::login_rate_limit::login_rate_limit_middleware;
 use axum_extra::extract::TypedHeader;
 use axum_extra::headers::Authorization;
 use axum_extra::headers::authorization::Bearer;
-use serde_json::json;
 use tokio::sync::mpsc::Sender;
 
 use jsonwebtoken::{encode, decode, DecodingKey, EncodingKey, Header, Validation, Algorithm};

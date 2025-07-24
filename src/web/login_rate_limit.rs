@@ -7,7 +7,7 @@ use axum::response::IntoResponse;
 /// Middleware for rate limiting login attempts per IP.
 pub async fn login_rate_limit_middleware(
     State(state): State<AppState>,
-    mut req: Request,
+    req: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
     // Extract IP address from request (use remote_addr if available, else fallback)
