@@ -1,11 +1,5 @@
 pub use controller::MotionController;
 // src/motion/mod.rs - Activate advanced features
-use crate::config::Config;
-use crate::hardware::HardwareManager;
-use crate::motion::planner::{MotionPlanner, MotionType};
-use crate::printer::PrinterState;
-use std::sync::Arc;
-use tokio::sync::RwLock;
 
 mod junction;
 mod kinematics;

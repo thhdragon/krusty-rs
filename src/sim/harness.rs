@@ -63,7 +63,7 @@ fn main() {
     let cli = Cli::parse();
 
     // 1. Load config (default or from file)
-    let mut config = if let Some(ref path) = cli.config {
+    let config = if let Some(ref path) = cli.config {
         match krusty_rs::config::load_config(path.to_str().expect("Invalid config path")) {
             Ok(cfg) => cfg,
             Err(e) => {
