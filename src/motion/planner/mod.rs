@@ -517,6 +517,10 @@ impl MotionPlanner {
         self.config.junction_deviation = jd;
         self.junction_deviation = crate::motion::junction::JunctionDeviation::new(jd);
     }
+
+    pub fn lookahead_buffer_size(&self) -> usize {
+        self.config.lookahead_buffer_size
+    }
 }
 
 pub mod adaptive;

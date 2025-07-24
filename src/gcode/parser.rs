@@ -365,9 +365,80 @@ impl<R: AsyncBufRead + Unpin> AsyncGCodeParser<R> {
 
 impl<R: AsyncBufRead + Unpin> Stream for AsyncGCodeParser<R> {
     type Item = Result<OwnedGCodeCommand, OwnedGCodeError>;
-    fn poll_next(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        // Not implemented: async streaming parser stub
-        Poll::Ready(None)
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let this = self.as_mut().get_mut();
+        // If we have commands queued from previous lines, yield them first
+        if let Some(cmd) = this.command_queue.pop_front() {
+            return Poll::Ready(Some(cmd));
+        }
+        if this.done {
+            return Poll::Ready(None);
+        }
+        // Read the next line asynchronously
+        let mut buf = std::mem::take(&mut this.buffer);
+        let mut reader_pin = Pin::new(&mut this.reader);
+        let mut to_consume = 0;
+        let mut found_newline = false;
+        match futures_util::ready!(AsyncBufRead::poll_fill_buf(reader_pin.as_mut(), cx)) {
+            Ok(data) if data.is_empty() => {
+                this.done = true;
+                return Poll::Ready(None);
+            }
+            Ok(data) => {
+                if let Some(pos) = data.iter().position(|&b| b == b'\n') {
+                    let line = &data[..=pos];
+                    buf.push_str(&String::from_utf8_lossy(line));
+                    to_consume = pos + 1;
+                    found_newline = true;
+                } else {
+                    buf.push_str(&String::from_utf8_lossy(data));
+                    to_consume = data.len();
+                }
+            }
+            Err(e) => {
+                this.done = true;
+                return Poll::Ready(Some(Err(OwnedGCodeError {
+                    message: format!("I/O error: {}", e),
+                    span: GCodeSpan { range: 0..0 },
+                })));
+            }
+        }
+        // Drop the borrow of data before calling consume
+        AsyncBufRead::consume(reader_pin.as_mut(), to_consume);
+        if !found_newline {
+            this.buffer = buf;
+            return Poll::Pending;
+        }
+        // Parse the buffered line
+        let line = buf.trim_end_matches(['\r', '\n']);
+        if line.is_empty() {
+            this.buffer.clear();
+            return self.poll_next(cx);
+        }
+        let mut parser = GCodeParser::new(line, this.config.clone());
+        if let Some(expander) = this.macro_expander.as_deref() {
+            parser = parser.with_macro_expander(expander);
+        }
+        while let Some(cmd) = futures::executor::block_on(async { parser.next_command_async().await }) {
+            match cmd {
+                Ok(cmd) => {
+                    this.command_queue.push_back(Ok(OwnedGCodeCommand::from(cmd)));
+                }
+                Err(e) => {
+                    this.command_queue.push_back(Err(OwnedGCodeError::from(e)));
+                    // On error, skip to next line (do not parse further in this line)
+                    break;
+                }
+            }
+        }
+        this.buffer.clear();
+        // Yield the next command or error
+        if let Some(cmd) = this.command_queue.pop_front() {
+            Poll::Ready(Some(cmd))
+        } else {
+            // If nothing was parsed, try the next line
+            self.poll_next(cx)
+        }
     }
 }
 

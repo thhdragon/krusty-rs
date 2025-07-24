@@ -4,7 +4,8 @@ use tokio::sync::{RwLock, broadcast};
 use crate::printer::Printer;
 use crate::config::Config;
 use crate::gcode::GCodeProcessor;
-use crate::motion::{MotionController, MotionConfig};
+use crate::motion::MotionController;
+use crate::PlannerMotionConfig;
 use crate::hardware::HardwareManager;
 use crate::web::WebInterface;
 use crate::file_manager::FileManager;
@@ -58,7 +59,7 @@ impl PrinterHostOS {
         let (shutdown_tx, _) = broadcast::channel(1);
         
         let hardware_manager = HardwareManager::new(config.clone());
-        let motion_config = MotionConfig::new_from_config(&config);
+        let motion_config = PlannerMotionConfig::new_from_config(&config);
         let motion_controller = Arc::new(RwLock::new(MotionController::new(
             state.clone(),
             hardware_manager.clone(),

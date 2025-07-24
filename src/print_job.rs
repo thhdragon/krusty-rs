@@ -5,6 +5,9 @@ use crate::GCodeCommand;
 use crate::gcode::GCodeError;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use futures_core::stream::Stream;
+use futures_util::StreamExt;
+use crate::gcode::parser::{OwnedGCodeCommand, OwnedGCodeError};
 
 /// Placeholder for print job state
 #[derive(Debug, Clone, Default)]
@@ -67,6 +70,29 @@ impl PrintJobManager {
     pub async fn next_command(&self) -> Option<Result<GCodeCommand<'static>, GCodeError>> {
         let mut queue = self.command_queue.lock().await;
         queue.pop_front()
+    }
+
+    /// Queue a new print job from an async stream of parsed/expanded G-code commands
+    pub async fn queue_from_stream<S>(&mut self, mut stream: S)
+    where
+        S: Stream<Item = Result<OwnedGCodeCommand, OwnedGCodeError>> + Unpin,
+    {
+        let mut queue = self.command_queue.lock().await;
+        while let Some(cmd) = stream.next().await {
+            // Convert OwnedGCodeCommand to GCodeCommand<'static> for compatibility
+            let cmd = match cmd {
+                Ok(owned) => Ok(match owned {
+                    OwnedGCodeCommand::Word { letter, value, span } => GCodeCommand::Word { letter, value: Box::leak(value.into_boxed_str()), span },
+                    OwnedGCodeCommand::Comment(comment, span) => GCodeCommand::Comment(Box::leak(comment.into_boxed_str()), span),
+                    OwnedGCodeCommand::Macro { name, args, span } => GCodeCommand::Macro { name: Box::leak(name.into_boxed_str()), args: Box::leak(args.into_boxed_str()), span },
+                    OwnedGCodeCommand::VendorExtension { name, args, span } => GCodeCommand::VendorExtension { name: Box::leak(name.into_boxed_str()), args: Box::leak(args.into_boxed_str()), span },
+                    OwnedGCodeCommand::Checksum { command, checksum, span } => GCodeCommand::Checksum { command: Box::new(GCodeCommand::Word { letter: 'N', value: "0", span: span.clone() }), checksum, span },
+                }),
+                Err(e) => Ok(GCodeCommand::Comment(Box::leak(e.message.into_boxed_str()), e.span)),
+            };
+            queue.push_back(cmd);
+        }
+        self.state.queued = true;
     }
 }
 

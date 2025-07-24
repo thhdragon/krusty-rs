@@ -132,11 +132,10 @@ impl MotionController {
     }
 
     pub fn get_queue_stats(&self) -> QueueStats {
-        // Stub: Replace with real stats collection
         QueueStats {
-            length: 0,
-            max_length: 0,
-            last_command: None,
+            length: self.planner.queue_length(),
+            max_length: self.planner.lookahead_buffer_size(),
+            last_command: None, // Could be enhanced to track last command
         }
     }
 }

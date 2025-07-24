@@ -121,33 +121,4 @@ impl FileManager {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::fs as stdfs;
-    use std::io::Write;
-    use tempfile::tempdir;
-
-    #[tokio::test]
-    async fn test_list_files_and_gcode_processing() {
-        let dir = tempdir().unwrap();
-        let file_path = dir.path().join("test.gcode");
-        let mut file = stdfs::File::create(&file_path).unwrap();
-        writeln!(file, ";comment line").unwrap();
-        writeln!(file, "G1 X10 Y10").unwrap();
-        writeln!(file, "").unwrap();
-        writeln!(file, "G1 X20 Y20").unwrap();
-        file.flush().unwrap();
-
-        let mut manager = FileManager::new();
-        manager.set_current_directory(dir.path().to_str().unwrap());
-
-        // Test list_files
-        let files = manager.list_files("").await.unwrap();
-        assert!(files.iter().any(|f| f.name == "test.gcode"));
-
-        // Test process_gcode_file
-        let lines = manager.process_gcode_file("test.gcode").await.unwrap();
-        assert_eq!(lines, vec!["G1 X10 Y10", "G1 X20 Y20"]);
-    }
-}
+// All test code moved to tests/file_manager.rs
