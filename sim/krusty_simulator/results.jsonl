@@ -1,5 +1,0 @@
-{"step":1,"x":0.0,"y":0.0,"z":0.0,"e":0.0,"vx":0.0,"vy":0.0,"vz":0.0,"ve":0.0,"ax":0.0,"ay":0.0,"az":0.0,"ae":0.0,"heater_on":false,"fan_on":false,"switch_on":false,"gcode":"G0 X0 Y0 Z0"}
-{"step":2,"x":10.0,"y":10.0,"z":0.0,"e":1.0,"vx":10.0,"vy":10.0,"vz":0.0,"ve":1.0,"ax":10.0,"ay":10.0,"az":0.0,"ae":1.0,"heater_on":false,"fan_on":false,"switch_on":false,"gcode":"G1 X10 Y10 Z0 E1"}
-{"step":3,"x":20.0,"y":10.0,"z":5.0,"e":2.0,"vx":10.0,"vy":0.0,"vz":5.0,"ve":1.0,"ax":0.0,"ay":-10.0,"az":5.0,"ae":0.0,"heater_on":false,"fan_on":false,"switch_on":false,"gcode":"G1 X20 Y10 Z5 E2"}
-{"step":4,"x":20.0,"y":20.0,"z":5.0,"e":3.0,"vx":0.0,"vy":10.0,"vz":0.0,"ve":1.0,"ax":-10.0,"ay":10.0,"az":-5.0,"ae":0.0,"heater_on":false,"fan_on":false,"switch_on":false,"gcode":"G1 X20 Y20 Z5 E3"}
-{"step":5,"x":30.0,"y":30.0,"z":10.0,"e":4.0,"vx":10.0,"vy":10.0,"vz":5.0,"ve":1.0,"ax":10.0,"ay":0.0,"az":5.0,"ae":0.0,"heater_on":false,"fan_on":false,"switch_on":false,"gcode":"G1 X30 Y30 Z10 E4"}
