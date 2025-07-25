@@ -1,6 +1,6 @@
 use std::env;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Write};
 
 // Add csv crate
 use csv::Writer;
@@ -179,7 +179,7 @@ fn main() {
         }
         parse_hardware_command(&line, &mut hw_state);
         let (loop_until_hit, conditional) = parse_loop_conditional(&line, &pos);
-        let mut new_pos = parse_gcode_line(&line, &pos);
+        let new_pos = parse_gcode_line(&line, &pos);
         // Simulate loop: repeat move until X < 10 (example logic)
         if loop_until_hit {
             let mut loop_pos = new_pos.clone();
