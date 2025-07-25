@@ -101,7 +101,27 @@ fn main() {
         _ => {
             // Default: run single scenario
             println!("Running scenario: {:?}", cli.scenario.as_deref().unwrap_or("baseline"));
-            // TODO: Call simulation logic with config, output to CSV in cli.output
+            // --- Begin simulation setup ---
+            use std::sync::{Arc, Mutex};
+            use krusty_rs::simulator::event_queue::{SimEventQueue, SimClock, SimEvent, SimEventType};
+            use std::time::Duration;
+            // 1. Create event queue and clock
+            let event_queue = Arc::new(Mutex::new(SimEventQueue::new()));
+            let clock = SimClock::new();
+            // 2. Schedule initial HeaterUpdate event
+            {
+                let mut queue = event_queue.lock().unwrap();
+                queue.push(SimEvent {
+                    timestamp: Duration::from_secs(0),
+                    event_type: SimEventType::HeaterUpdate,
+                    payload: None,
+                });
+            }
+            // 3. Instantiate Simulator and run event loop
+            let mut sim = krusty_rs::simulator::Simulator::new(event_queue.clone(), clock);
+            let sim_timeout = std::time::Duration::from_secs(90); // 90s simulated time
+            sim.run_event_loop_with_timeout(sim_timeout);
+            // --- End simulation setup ---
         }
     }
 }

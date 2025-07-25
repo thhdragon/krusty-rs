@@ -95,6 +95,66 @@ impl SCurveGenerator {
         Ok(trajectory)
     }
 
+    /// Generate and schedule S-curve trajectory and schedule step events
+    pub fn generate_and_schedule_s_curve(
+        &self,
+        distance: f64,
+        start_velocity: f64,
+        end_velocity: f64,
+        cruise_velocity: f64,
+        axis: usize,
+        event_queue: &std::sync::Arc<std::sync::Mutex<crate::simulator::event_queue::SimEventQueue>>,
+        clock: &crate::simulator::event_queue::SimClock,
+    ) -> Result<(), SCurveError> {
+        let trajectory = self.generate_s_curve(distance, start_velocity, end_velocity, cruise_velocity)?;
+        for point in trajectory {
+            let event = crate::simulator::event_queue::SimEvent {
+                timestamp: clock.current_time + std::time::Duration::from_secs_f64(point.time),
+                event_type: crate::simulator::event_queue::SimEventType::Step,
+                payload: Some(Box::new(crate::motion::stepper::StepCommand {
+                    axis,
+                    steps: (point.position.round() as u32),
+                    direction: point.velocity >= 0.0,
+                })),
+            };
+            event_queue.lock().unwrap().push(event);
+        }
+        Ok(())
+    }
+
+    /// Generate and schedule S-curve trajectories for all axes
+    pub fn generate_and_schedule_multi_axis_s_curve(
+        &self,
+        distances: [f64; 4],
+        start_velocities: [f64; 4],
+        end_velocities: [f64; 4],
+        cruise_velocities: [f64; 4],
+        event_queue: &std::sync::Arc<std::sync::Mutex<crate::simulator::event_queue::SimEventQueue>>,
+        clock: &crate::simulator::event_queue::SimClock,
+    ) -> Result<(), SCurveError> {
+        for axis in 0..4 {
+            let trajectory = self.generate_s_curve(
+                distances[axis],
+                start_velocities[axis],
+                end_velocities[axis],
+                cruise_velocities[axis],
+            )?;
+            for point in trajectory {
+                let event = crate::simulator::event_queue::SimEvent {
+                    timestamp: clock.current_time + std::time::Duration::from_secs_f64(point.time),
+                    event_type: crate::simulator::event_queue::SimEventType::Step,
+                    payload: Some(Box::new(crate::motion::stepper::StepCommand {
+                        axis,
+                        steps: (point.position.round() as u32),
+                        direction: point.velocity >= 0.0,
+                    })),
+                };
+                event_queue.lock().unwrap().push(event);
+            }
+        }
+        Ok(())
+    }
+
     fn calculate_jerk_phase(&self, t: f64, jerk_time: f64, start_velocity: f64, direction: f64) -> MotionPoint {
         // During jerk phase: jerk = ±max_jerk
         // acceleration = ±max_jerk * t

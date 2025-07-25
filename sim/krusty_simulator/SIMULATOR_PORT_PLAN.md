@@ -3,6 +3,43 @@
 ## Overview
 This plan details the steps to fully clone prunt/prunt_simulator’s advanced simulation physics, event systems, hardware abstraction, and output features in Rust, achieving full parity, extensibility, and maintainability.
 
+**Important:** The end goal is to evolve from a simulator to robust, real-world production firmware. All functions, modules, and hooks must be designed and validated for actual hardware deployment, not just simulation. Prunt/prunt_simulator and Klipper are advanced references for feature and safety parity, but this project is its own implementation—do not assume direct equivalence or copy-paste. Always build with production readiness, extensibility, and safety in mind.
+
+---
+
+## Verification & Wiring Discipline
+
+**Never assume a feature is finished or wired up.**
+- Always double-check that every function, module, and integration point is actually connected, tested, and working as intended.
+- Validate that all hooks, callbacks, and event handlers are registered and exercised in real scenarios.
+- Use cargo's unused warnings and integration tests to identify dead code, unconnected features, and missing wiring.
+- Document all assumptions and verify them with real tests or code reviews.
+- Treat every subsystem as potentially incomplete until proven otherwise.
+- **Do not use `_` prefixes just to silence warnings.** All unused code, variables, and functions should be reviewed and either removed or properly integrated. Intentionally hiding unused code with `_` is discouraged for production firmware—review and address the root cause instead.
+- Regularly search for `_`-prefixed identifiers and ensure nothing critical is being hidden or left incomplete.
+
+---
+
+## Iterative Deep Dive: Incomplete & Unwired Features
+
+Below is a living table of features, functions, and modules that are incomplete, not fully wired, or not validated in integration. This list should be updated continuously as the codebase evolves. Use cargo's unused warnings, integration test coverage, and manual code review to populate and maintain this table.
+
+| Area/Module         | Feature/Function         | Status         | Notes/Next Steps |
+|---------------------|-------------------------|----------------|------------------|
+| motion/             | S-curve profiles        | Incomplete     | Needs implementation and integration |
+| motion/             | Jerk (crackle) support  | Incomplete     | Not wired to stepper timing         |
+| hardware/           | Heater simulation       | Partial        | Lacks error injection, not validated|
+| gcode/              | Macro expansion         | Incomplete     | Not exercised in tests              |
+| simulator/          | Event queue             | Partial        | Not all modules schedule events     |
+| output/             | JSONL output            | Incomplete     | Not hooked to event system          |
+| integration/        | Plugin system           | Not started    | Design and initial hooks missing    |
+| ...                 | ...                     | ...            | ...                                |
+
+- Use `cargo build` and review all unused warnings to find dead/unwired code.
+- Run integration and unit tests to identify untested or unexercised features.
+- Manually review module interfaces for missing connections or incomplete wiring.
+- Update this table regularly as features are completed or new gaps are found.
+
 ---
 
 ## Subsystem Breakdown & Feature Mapping

@@ -3,6 +3,99 @@ use std::collections::VecDeque;
 use std::time::Instant;
 use super::hardware_traits::TemperatureControllerTrait;
 
+// --- Heater/Thermistor Simulation Types ---
+#[derive(Debug, Clone)]
+pub struct HeaterState {
+    pub power: f32,           // 0.0-1.0
+    pub target_temp: f32,     // °C
+    pub current_temp: f32,    // °C
+    pub is_on: bool,
+    pub runaway_detected: bool,
+    pub runaway_check_timer: f32, // seconds since heater turned on
+    pub runaway_enabled: bool,    // Only enable runaway detection after close to target
+}
+
+#[derive(Debug, Clone)]
+pub struct ThermistorState {
+    pub measured_temp: f32,   // °C
+    pub noise: f32,           // Simulated sensor noise
+    pub last_update: f64,     // Sim time
+}
+
+#[derive(Debug, Clone)]
+pub enum ThermalEvent {
+    HeaterOn,
+    HeaterOff,
+    TempUpdate(f32),
+    RunawayDetected,
+    Recovery,
+}
+
+impl HeaterState {
+    /// Simulate physics update for heater and thermistor
+    pub fn update(&mut self, dt: f32, ambient: f32) -> ThermalEvent {
+        // --- CRITICAL: Overheat/overshoot runaway detection FIRST ---
+        let max_temp = 300.0; // Absolute safety limit
+        let overshoot_threshold = 30.0; // Max allowed overshoot above target
+        let runaway_triggered = self.current_temp > max_temp || self.current_temp > self.target_temp + overshoot_threshold;
+        if runaway_triggered {
+            self.runaway_detected = true;
+            self.is_on = false;
+        }
+        // --- END CRITICAL SECTION ---
+        let runaway_threshold = 10.0; // °C band for enabling runaway detection
+        if self.is_on {
+            // Simple heat model: Q = power * max_delta
+            let max_delta = 12.0; // °C/sec at full power (realistic for 3D printer hotend)
+            let heat_gain = self.power * max_delta * dt;
+            let heat_loss = 0.02 * (self.current_temp - ambient) * dt; // Lower heat loss for more realistic ramp
+            self.current_temp += heat_gain - heat_loss;
+            // Enable runaway detection only after close to target
+            if !self.runaway_enabled && self.current_temp >= self.target_temp - runaway_threshold {
+                self.runaway_enabled = true;
+                self.runaway_check_timer = 0.0;
+            }
+            // Increment runaway check timer if enabled and power is high
+            if self.runaway_enabled && self.power > 0.5 {
+                self.runaway_check_timer += dt;
+            } else if self.runaway_enabled {
+                self.runaway_check_timer = 0.0;
+            }
+        } else {
+            // Cool towards ambient
+            let heat_loss = 0.1 * (self.current_temp - ambient) * dt;
+            self.current_temp -= heat_loss;
+            self.runaway_check_timer = 0.0;
+            self.runaway_enabled = false;
+        }
+        // Reset runaway_enabled if target changes significantly
+        if (self.current_temp < self.target_temp - runaway_threshold) && self.runaway_enabled {
+            self.runaway_enabled = false;
+            self.runaway_check_timer = 0.0;
+        }
+        // Runaway detection: only after enabled and 10s of high power
+        if self.is_on && self.runaway_enabled && self.power > 0.5 && self.runaway_check_timer > 10.0 && self.current_temp < self.target_temp - runaway_threshold {
+            self.runaway_detected = true;
+            self.is_on = false;
+            return ThermalEvent::RunawayDetected;
+        }
+        if runaway_triggered {
+            return ThermalEvent::RunawayDetected;
+        }
+        ThermalEvent::TempUpdate(self.current_temp)
+    }
+}
+
+impl ThermistorState {
+    pub fn update(&mut self, true_temp: f32, dt: f32) {
+        // Simulate lag and noise
+        let lag = 0.8;
+        self.measured_temp += lag * (true_temp - self.measured_temp) * dt;
+        self.measured_temp += self.noise * (rand::random::<f32>() - 0.5);
+        self.last_update += dt as f64;
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct TemperatureController {
     /// PID parameters

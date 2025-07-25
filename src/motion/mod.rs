@@ -6,6 +6,7 @@ mod kinematics;
 pub mod planner;
 pub mod controller;
 pub mod shaper;
+pub mod stepper;
 
 pub use planner::MotionError;
 
