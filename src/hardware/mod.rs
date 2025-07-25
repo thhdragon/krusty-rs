@@ -1,3 +1,4 @@
+use crate::hardware::board_config::{BoardConfig, BoardTiming};
 use crate::hardware::hardware_traits::PeripheralTrait;
 impl PeripheralTrait for FanController {
     fn perform_action(&mut self, action: &str) -> Result<(), Box<dyn std::error::Error + Send>> {
@@ -25,6 +26,7 @@ impl PeripheralTrait for GenericSensor {
 // Declare the submodules within the `hardware` module
 pub mod temperature; // This refers to src/hardware/temperature.rs
 pub mod hardware_traits; // Expose trait definitions for hardware modules
+pub mod board_config; // Expose board configuration for hardware modules
 
 // Re-export items you want easily accessible from the `hardware` module level
 
@@ -58,15 +60,20 @@ pub enum HardwareError {
 #[derive(Debug)]
 pub struct HardwareManager {
     config: Config,
+    board: BoardConfig,
     serial: Option<SerialPort>,
     pub fan: FanController,
     pub sensor: GenericSensor,
 }
 
 impl HardwareManager {
-    pub fn new(config: Config) -> Self {
+    pub fn new(config: Config, board: BoardConfig) -> Self {
+        // Example: Use board pin mapping for hardware initialization
+        tracing::info!("Initializing hardware for board: {}", board.name);
+        // Use board.pins and board.timing as needed
         Self {
             config,
+            board,
             serial: None,
             fan: FanController::new(),
             sensor: GenericSensor::new(),
@@ -185,6 +192,7 @@ impl Clone for HardwareManager {
     fn clone(&self) -> Self {
         Self {
             config: self.config.clone(),
+            board: self.board.clone(),
             serial: None, // Can't clone the serial connection, so start fresh
             fan: self.fan.clone(),
             sensor: self.sensor.clone(),

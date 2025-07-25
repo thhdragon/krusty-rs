@@ -1,0 +1,6 @@
+step,x,y,z,e,vx,vy,vz,ve,ax,ay,az,ae,heater_on,fan_on,switch_on,gcode
+1,0,0,0,0,0,0,0,0,0,0,0,0,false,false,false,G0 X0 Y0 Z0
+2,10,10,0,1,10,10,0,1,10,10,0,1,false,false,false,G1 X10 Y10 Z0 E1
+3,20,10,5,2,10,0,5,1,0,-10,5,0,false,false,false,G1 X20 Y10 Z5 E2
+4,20,20,5,3,0,10,0,1,-10,10,-5,0,false,false,false,G1 X20 Y20 Z5 E3
+5,30,30,10,4,10,10,5,1,10,0,5,0,false,false,false,G1 X30 Y30 Z10 E4

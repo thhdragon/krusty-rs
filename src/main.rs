@@ -6,12 +6,19 @@ mod hardware;
 mod config;
 mod file_manager;
 mod web;
+mod simulator;
 
 use printer::Printer;
 use std::env;
 use web::printer_channel::{PrinterRequest};
 use tokio::sync::mpsc;
 use tokio::task::LocalSet;
+use hardware::board_config::BoardConfig;
+use simulator::event_queue::{SimEventQueue, SimClock};
+use hardware::HardwareManager;
+use motion::MotionSystem;
+use simulator::Simulator;
+use std::sync::{Arc, Mutex};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
@@ -49,6 +56,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
     tracing::info!("Max velocity: {} mm/s", config.printer.max_velocity);
     tracing::info!("Max acceleration: {} mm/s²", config.printer.max_accel);
     
+    // Instantiate board config from loaded config
+    let board_name = config.printer.printer_name.clone().unwrap_or("DefaultBoard".to_string());
+    let board = BoardConfig::new(&board_name);
+    // Create event queue and simulation clock
+    let event_queue = Arc::new(Mutex::new(SimEventQueue::new()));
+    let clock = SimClock::new();
+    // Pass to hardware manager, motion system, and simulator
+    let hardware_manager = HardwareManager::new(config.clone(), board.clone());
+    let motion_system = MotionSystem::new(event_queue.clone(), board.clone());
+    let simulator = Simulator::new(event_queue, clock);
+
     // Create the main Printer object.
     let mut printer = match Printer::new(config).await { // The `mut` is needed for the printer task loop
         Ok(p) => p,

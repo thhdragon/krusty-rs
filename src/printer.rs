@@ -65,7 +65,8 @@ impl Printer {
     pub async fn new(config: Config) -> Result<Self, PrinterError> {
         let state = Arc::new(RwLock::new(PrinterState::new()));
         let (shutdown_tx, _) = broadcast::channel(1);
-        let hardware_manager = HardwareManager::new(config.clone());
+        let board = crate::hardware::board_config::BoardConfig::new(&config.printer.printer_name.clone().unwrap_or("DefaultBoard".to_string()));
+        let hardware_manager = HardwareManager::new(config.clone(), board);
         let motion_controller = Arc::new(RwLock::new(MotionController::new(state.clone(), hardware_manager.clone(), MotionMode::Basic, &config)));
         let gcode_processor = GCodeProcessor::new(state.clone(), motion_controller.clone());
 

@@ -165,7 +165,8 @@ impl PrinterHostOS {
         let state = Arc::new(RwLock::new(crate::printer::PrinterState::default()));
         let (shutdown_tx, _) = broadcast::channel(1);
 
-        let hardware_manager = HardwareManager::new(config.clone());
+        let board = crate::hardware::board_config::BoardConfig::new(&config.printer.printer_name.clone().unwrap_or("DefaultBoard".to_string()));
+        let hardware_manager = HardwareManager::new(config.clone(), board);
         let _motion_config = PlannerMotionConfig::new_from_config(&config); // Unused, for future planner config
         let motion_controller = Arc::new(RwLock::new(MotionController::new(
             state.clone(),

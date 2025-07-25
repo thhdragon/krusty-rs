@@ -35,3 +35,4 @@ pub mod web;
 pub mod communication;
 pub use communication::*;
 pub mod scheduler;
+pub mod simulator;
