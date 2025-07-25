@@ -1,4 +1,4 @@
-use crate::hardware::board_config::{BoardConfig, BoardTiming};
+use crate::hardware::board_config::BoardConfig;
 use crate::hardware::hardware_traits::PeripheralTrait;
 impl PeripheralTrait for FanController {
     fn perform_action(&mut self, action: &str) -> Result<(), Box<dyn std::error::Error + Send>> {

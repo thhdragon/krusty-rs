@@ -10,8 +10,6 @@ use crate::system_info::SystemInfo;
 // Only internal logic and trait implementations should remain here
 
 use crate::communication::serial_interface::SerialInterface;
-use crate::scheduler::time_interface::TimeInterface;
-use crate::communication::event_interface::EventInterface;
 use crate::scheduler::clock_sync_stub::ClockSyncStub;
 use crate::communication::event_bus_stub::EventBusStub;
 // use serial2_tokio::SerialPort; // Only used in trait impl below (commented out)
