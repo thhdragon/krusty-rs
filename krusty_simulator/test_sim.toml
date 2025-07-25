@@ -1,0 +1,13 @@
+[simulation]
+gcode = "krusty_simulator/test.gcode"
+output_dir = "krusty_simulator/"
+
+[motion]
+axes = ["x", "y", "z", "e"]
+profile = "s_curve"
+max_speed = 200.0
+max_accel = 1000.0
+max_jerk = 20.0
+
+[hardware]
+board = "default"

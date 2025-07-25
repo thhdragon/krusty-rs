@@ -58,3 +58,8 @@ codegen-units = 1
 opt-level = "z"
 panic = "abort"
 
+[workspace]
+members = [
+    "krusty_simulator"
+]
+
