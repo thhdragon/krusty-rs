@@ -1,8 +1,41 @@
-// src/host_os.rs - Complete 3D Printer Host OS Interface
+use crate::communication::serial_protocol::SerialProtocolStub;
+use crate::multi_mcu_manager::MultiMCUManagerStub;
+use crate::module_manager::ModuleManagerStub;
+use crate::system_info::SystemInfo;
+// NOTE: Public API types (PrinterHostOS, SystemInfo, stubs) are re-exported via mod.rs and lib.rs
+// Only internal logic and trait implementations should remain here
+
+// src/host_os.rs - Implementation details for 3D Printer Host OS
+// Public API types (PrinterHostOS, SystemInfo, stubs) are re-exported via mod.rs and lib.rs
+// Only internal logic and trait implementations should remain here
+
+use crate::communication::serial_interface::SerialInterface;
+use crate::scheduler::time_interface::TimeInterface;
+use crate::communication::event_interface::EventInterface;
+use crate::scheduler::clock_sync_stub::ClockSyncStub;
+use crate::communication::event_bus_stub::EventBusStub;
+// use serial2_tokio::SerialPort; // Only used in trait impl below (commented out)
+// ...existing code...
+
+// SystemInfo struct moved to src/system_info.rs
+
+// ...existing code...
+
+// ModuleManagerStub moved to src/module_manager.rs
+
+// MultiMCUManagerStub moved to src/multi_mcu_manager.rs
+
+
+// ...SerialInterface trait moved to src/communication/serial_interface.rs...
+
+// ...TimeInterface trait moved to src/scheduler/time_interface.rs...
+
+// ...EventInterface trait moved to src/communication/event_interface.rs...
+
 use std::sync::Arc;
 use tokio::sync::{RwLock, broadcast};
 use crate::printer::Printer;
-use crate::config::Config;
+use crate::config::{Config, ConfigManager};
 use crate::gcode::GCodeProcessor;
 use crate::motion::MotionController;
 use crate::motion::controller::MotionMode;
@@ -15,52 +48,125 @@ use crate::file_manager::FileManager;
 pub struct PrinterHostOS {
     /// Core printer system
     printer: Printer,
-    
+
     /// Configuration management
     config_manager: ConfigManager,
-    
+
     /// File management
     file_manager: FileManager,
-    
+
     /// Web interface
     web_interface: WebInterface,
-    
+
     /// G-code processing
     gcode_processor: GCodeProcessor,
-    
+
     /// Motion control
     motion_controller: Arc<RwLock<MotionController>>,
-    
+
     /// Hardware interface
     hardware_manager: HardwareManager,
-    
+
     /// System state
     state: Arc<RwLock<crate::printer::PrinterState>>,
-    
+
     /// Shutdown signaling
     shutdown_tx: broadcast::Sender<()>,
-}
-
-/// Configuration manager
-pub struct ConfigManager {
-    config: Config,
-    config_path: String,
-    backup_configs: Vec<Config>,
+    /// Serial protocol stub (for parity with Klipper)
+    serial_protocol: SerialProtocolStub,
+    /// Print time/MCU clock sync stub
+    clock_sync: ClockSyncStub,
+    /// Dynamic module manager stub
+    module_manager: ModuleManagerStub,
+    /// Multi-MCU manager stub
+    multi_mcu_manager: MultiMCUManagerStub,
+    /// Event bus stub
+    event_bus: EventBusStub,
 }
 
 /// Main Host OS implementation
 impl PrinterHostOS {
+    /// Get a reference to the printer
+    pub fn get_printer(&self) -> &Printer {
+        &self.printer
+    }
+
+    /// Get a reference to the GCodeProcessor
+    pub fn get_gcode_processor(&self) -> &GCodeProcessor {
+        &self.gcode_processor
+    }
+
+    /// Process a G-code command using the GCodeProcessor
+    pub async fn process_gcode_command(&mut self, gcode: &str) -> Result<(), Box<dyn std::error::Error>> {
+        self.gcode_processor.process_command(gcode).await?;
+        Ok(())
+    }
+
+    /// Get the current printer state
+    pub async fn get_printer_state(&self) -> crate::printer::PrinterState {
+        self.state.read().await.clone()
+    }
+
+    /// Get the current configuration
+    pub fn get_config(&self) -> &Config {
+        self.config_manager.get_config()
+    }
+
+    /// Get the file manager
+    pub fn get_file_manager(&self) -> &FileManager {
+        &self.file_manager
+    }
+
+    /// Get the hardware manager
+    pub fn get_hardware_manager(&self) -> &HardwareManager {
+        &self.hardware_manager
+    }
+
+    /// Get the motion controller
+    pub fn get_motion_controller(&self) -> Arc<RwLock<MotionController>> {
+        self.motion_controller.clone()
+    }
+
+    /// Get the web interface
+    pub fn get_web_interface(&self) -> &WebInterface {
+        &self.web_interface
+    }
+
+    /// Get the serial protocol stub
+    pub fn get_serial_protocol(&self) -> &SerialProtocolStub {
+        &self.serial_protocol
+    }
+
+    /// Get the clock sync stub
+    pub fn get_clock_sync(&self) -> &ClockSyncStub {
+        &self.clock_sync
+    }
+
+    /// Get the module manager stub
+    pub fn get_module_manager(&self) -> &ModuleManagerStub {
+        &self.module_manager
+    }
+
+    /// Get the multi-MCU manager stub
+    pub fn get_multi_mcu_manager(&self) -> &MultiMCUManagerStub {
+        &self.multi_mcu_manager
+    }
+
+    /// Get the event bus stub
+    pub fn get_event_bus(&self) -> &EventBusStub {
+        &self.event_bus
+    }
     /// Create new Host OS instance with pre-loaded configuration
     pub async fn new_with_config(config: Config) -> Result<Self, Box<dyn std::error::Error>> {
         let config_path = "printer.toml".to_string(); // Default path
         let config_manager = ConfigManager::new(config.clone(), config_path);
-        
+
         // Initialize core components
         let state = Arc::new(RwLock::new(crate::printer::PrinterState::default()));
         let (shutdown_tx, _) = broadcast::channel(1);
-        
+
         let hardware_manager = HardwareManager::new(config.clone());
-        let motion_config = PlannerMotionConfig::new_from_config(&config);
+        let _motion_config = PlannerMotionConfig::new_from_config(&config); // Unused, for future planner config
         let motion_controller = Arc::new(RwLock::new(MotionController::new(
             state.clone(),
             hardware_manager.clone(),
@@ -76,7 +182,16 @@ impl PrinterHostOS {
         let printer = Printer::new(config.clone()).await?;
         let file_manager = FileManager::new();
         let web_interface = WebInterface::new(state.clone());
-        
+
+        // Initialize stubs for extensibility
+        // Setup serial port (example: "/dev/ttyUSB0", 250000 baud)
+        let serial_port = Arc::new(serial2_tokio::SerialPort::open("/dev/ttyUSB0", 250000)?);
+        let serial_protocol = SerialProtocolStub::new(serial_port, 4); // window_size=4
+        let clock_sync = ClockSyncStub::new();
+        let module_manager = ModuleManagerStub::new();
+        let multi_mcu_manager = MultiMCUManagerStub::new();
+        let event_bus = EventBusStub::new();
+
         Ok(Self {
             printer,
             config_manager,
@@ -87,6 +202,11 @@ impl PrinterHostOS {
             hardware_manager,
             state,
             shutdown_tx,
+            serial_protocol,
+            clock_sync,
+            module_manager,
+            multi_mcu_manager,
+            event_bus,
         })
     }
 
@@ -128,7 +248,42 @@ impl PrinterHostOS {
         
         // Start file monitoring
         self.start_file_monitoring().await?;
+
+        // Start G-code processing loop (connect unused gcode_processor)
+        self.start_gcode_processing_loop().await?;
+
+        // Optionally, start printer main loop (connect unused printer)
+        self.start_printer_main_loop().await?;
         
+        Ok(())
+    }
+    /// G-code processing loop
+    async fn start_gcode_processing_loop(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let mut shutdown_rx = self.shutdown_tx.subscribe();
+        let gcode_processor = self.gcode_processor.clone();
+        tokio::task::spawn_local(async move {
+            let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(10));
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            loop {
+                tokio::select! {
+                    _ = shutdown_rx.recv() => {
+                        tracing::info!("G-code processing loop shutting down");
+                        break;
+                    }
+                    _ = interval.tick() => {
+                        if let Err(e) = gcode_processor.process_next_command().await {
+                            tracing::error!("G-code processing error: {}", e);
+                        }
+                    }
+                }
+            }
+        });
+        Ok(())
+    }
+
+    /// Printer main loop (stub for future use)
+    async fn start_printer_main_loop(&self) -> Result<(), Box<dyn std::error::Error>> {
+        // Example: monitor printer state, update progress, etc.
         Ok(())
     }
 
@@ -210,7 +365,7 @@ impl PrinterHostOS {
             state.print_progress = 0.0; // Reset progress
             state.printing = true;
             state.paused = false;
-            // File size and position tracking removed
+            // File size and position tracking removed (ensure this is documented in PrinterState)
         }
         
         tracing::info!("Loaded {} lines of G-code", lines.len());
@@ -231,7 +386,7 @@ impl PrinterHostOS {
             }
             state.printing = true;
             state.paused = false;
-            // state.system_stats.print_count += 1; // Removed unsupported field
+            // Print count tracking removed (ensure PrinterState docs clarify)
         }
         
         Ok(())
@@ -284,7 +439,7 @@ impl PrinterHostOS {
             let mut state = self.state.write().await;
             state.printing = false;
             state.paused = false;
-            // state.system_stats.failed_prints += 1; // Removed unsupported field
+            // Failed print tracking removed (ensure PrinterState docs clarify)
         }
         
         // Emergency stop
@@ -348,10 +503,7 @@ impl PrinterHostOS {
             .set_heater_temperature("hotend", temperature)
             .await?;
         
-        {
-            let state = self.state.write().await;
-            // state.temperature.hotend_target = temperature; // Removed unsupported field
-        }
+        // hotend_target tracking removed (ensure PrinterState docs clarify)
         
         Ok(())
     }
@@ -363,10 +515,7 @@ impl PrinterHostOS {
             .set_heater_temperature("bed", temperature)
             .await?;
         
-        {
-            let state = self.state.write().await;
-            // state.temperature.bed_target = temperature; // Removed unsupported field
-        }
+        // bed_target tracking removed (ensure PrinterState docs clarify)
         
         Ok(())
     }
@@ -410,7 +559,7 @@ impl PrinterHostOS {
             let mut state = self.state.write().await;
             state.printing = false;
             state.paused = false;
-            // state.error = Some("Emergency stop activated".to_string()); // Removed unsupported field
+            // Error field removed (ensure PrinterState docs clarify)
         }
         
         Ok(())
@@ -425,7 +574,7 @@ impl PrinterHostOS {
 
     /// Reload configuration
     pub async fn reload_config(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let new_config = self.config_manager.reload_config()?;
+        let _ = self.config_manager.reload_config()?; // Unused, for future config reload logic
         // Apply new configuration to all components
         // This would require reinitializing components
         Ok(())
@@ -463,128 +612,8 @@ impl PrinterHostOS {
 
     /// Get system uptime
     async fn get_uptime(&self) -> f64 {
-        self.state.read().await.print_progress // Removed system_stats.uptime reference
+        self.state.read().await.print_progress // Uptime tracking removed (ensure PrinterState docs clarify)
     }
 }
 
-/// System information structure
-#[derive(Debug, Clone)]
-pub struct SystemInfo {
-    pub version: String,
-    pub name: String,
-    pub rust_version: String,
-    pub uptime: f64,
-}
-
-impl ConfigManager {
-    pub fn new(config: Config, config_path: String) -> Self {
-        Self {
-            config,
-            config_path,
-            backup_configs: Vec::new(),
-        }
-    }
-
-    pub fn load_config(config_path: &str) -> Result<Config, Box<dyn std::error::Error>> {
-        Ok(crate::config::load_config(config_path)?)
-    }
-
-    pub async fn save_config(&self, config: &Config) -> Result<(), Box<dyn std::error::Error>> {
-        use std::io::Write;
-        let toml_string = toml::to_string(config)?;
-        let mut file = std::fs::File::create(&self.config_path)?;
-        file.write_all(toml_string.as_bytes())?;
-        Ok(())
-    }
-
-    pub fn reload_config(&self) -> Result<Config, Box<dyn std::error::Error>> {
-        Self::load_config(&self.config_path)
-    }
-
-    pub fn get_config(&self) -> &Config {
-        &self.config
-    }
-
-    pub fn set_config(&mut self, config: Config) {
-        self.config = config;
-    }
-
-    pub fn backup_config(&mut self) {
-        self.backup_configs.push(self.config.clone());
-        // Keep only last 5 backups
-        while self.backup_configs.len() > 5 {
-            self.backup_configs.remove(0);
-        }
-    }
-
-    pub fn restore_backup(&mut self, index: usize) -> Result<(), Box<dyn std::error::Error>> {
-        if index < self.backup_configs.len() {
-            self.config = self.backup_configs[index].clone();
-            Ok(())
-        } else {
-            Err("Backup index out of range".into())
-        }
-    }
-}
-
-/// --- Host OS Feature Stubs (for parity with Klipper) ---
-
-/// Robust serial protocol stub (CRC, sequence, retransmit, windowing)
-pub struct SerialProtocolStub;
-impl SerialProtocolStub {
-    /// Send a command with CRC and sequence number (stub)
-    pub async fn send_command(&self, _cmd: &str) -> Result<(), String> {
-        // TODO: Implement CRC, sequence, retransmit, windowing
-        Ok(())
-    }
-    /// Receive and validate a response (stub)
-    pub async fn receive_response(&self) -> Result<String, String> {
-        // TODO: Implement CRC, sequence, retransmit, windowing
-        Ok("stub response".to_string())
-    }
-}
-
-/// Print time/MCU clock synchronization stub
-pub struct ClockSyncStub;
-impl ClockSyncStub {
-    pub fn new() -> Self { Self }
-    /// Sync host and MCU clocks (stub)
-    pub async fn sync(&self) -> Result<(), String> {
-        // TODO: Implement print time/MCU clock sync
-        Ok(())
-    }
-}
-
-/// Dynamic module system stub
-pub struct ModuleManagerStub;
-impl ModuleManagerStub {
-    pub fn new() -> Self { Self }
-    /// Load a module by name (stub)
-    pub fn load_module(&self, _name: &str) {
-        // TODO: Implement dynamic module loading
-    }
-}
-
-/// Multi-MCU abstraction stub
-pub struct MultiMCUManagerStub;
-impl MultiMCUManagerStub {
-    pub fn new() -> Self { Self }
-    /// Register a new MCU (stub)
-    pub fn register_mcu(&self, _id: &str) {
-        // TODO: Implement multi-MCU support
-    }
-}
-
-/// Event extensibility stub
-pub struct EventBusStub;
-impl EventBusStub {
-    pub fn new() -> Self { Self }
-    /// Register an event handler (stub)
-    pub fn register_handler(&self, _event: &str, _handler: fn()) {
-        // TODO: Implement event handler registration
-    }
-    /// Emit an event (stub)
-    pub fn emit(&self, _event: &str) {
-        // TODO: Implement event emission
-    }
-}
+// ...existing code...

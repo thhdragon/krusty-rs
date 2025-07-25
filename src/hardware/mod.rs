@@ -1,6 +1,30 @@
+use crate::hardware::hardware_traits::PeripheralTrait;
+impl PeripheralTrait for FanController {
+    fn perform_action(&mut self, action: &str) -> Result<(), Box<dyn std::error::Error + Send>> {
+        match action {
+            "set_speed" => {
+                self.set_speed(128).map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)?;
+                Ok(())
+            }
+            _ => Err(Box::new(FanError::InvalidSpeed(128)) as Box<dyn std::error::Error + Send>),
+        }
+    }
+}
+impl PeripheralTrait for GenericSensor {
+    fn perform_action(&mut self, action: &str) -> Result<(), Box<dyn std::error::Error + Send>> {
+        match action {
+            "read" => {
+                self.read().map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)?;
+                Ok(())
+            }
+            _ => Err(Box::new(SensorError::ReadError) as Box<dyn std::error::Error + Send>),
+        }
+    }
+}
 // src/hardware/mod.rs
 // Declare the submodules within the `hardware` module
 pub mod temperature; // This refers to src/hardware/temperature.rs
+pub mod hardware_traits; // Expose trait definitions for hardware modules
 
 // Re-export items you want easily accessible from the `hardware` module level
 
@@ -8,14 +32,14 @@ use crate::config::Config;
 use std::time::Duration;
 use thiserror::Error;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio_serial::{SerialPortBuilderExt, SerialStream};
+use serial2_tokio::SerialPort;
 
 #[derive(Debug, Error)]
 pub enum HardwareError {
     #[error("Serial port error: {0}")]
-    Serial(#[from] tokio_serial::Error),
+    Serial(#[from] std::io::Error),
     #[error("IO error: {0}")]
-    Io(#[from] std::io::Error),
+    Io(std::io::Error),
     #[error("Not connected to hardware")]
     NotConnected,
     #[error("Timeout waiting for response")]
@@ -34,7 +58,7 @@ pub enum HardwareError {
 #[derive(Debug)]
 pub struct HardwareManager {
     config: Config,
-    serial: Option<SerialStream>,
+    serial: Option<SerialPort>,
     pub fan: FanController,
     pub sensor: GenericSensor,
 }
@@ -54,9 +78,7 @@ impl HardwareManager {
             "Connecting to MCU: {} at {} baud",
             self.config.mcu.serial, self.config.mcu.baud
         );
-        let port = tokio_serial::new(&self.config.mcu.serial, self.config.mcu.baud)
-            .timeout(Duration::from_millis(100))
-            .open_native_async()?;
+        let port = SerialPort::open(&self.config.mcu.serial, self.config.mcu.baud)?;
         self.serial = Some(port);
         tracing::info!("Connected to MCU successfully");
         Ok(())

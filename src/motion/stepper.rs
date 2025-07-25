@@ -1,3 +1,21 @@
+use crate::hardware::hardware_traits::StepperControllerTrait;
+impl StepperControllerTrait for StepGenerator {
+    fn step(&mut self, steps: i32) -> Result<(), Box<dyn std::error::Error + Send>> {
+        // For demonstration, step all axes by the given amount
+        for i in 0..4 {
+            self.current_steps[i] += steps as i64;
+        }
+        Ok(())
+    }
+    fn enable(&mut self) -> Result<(), Box<dyn std::error::Error + Send>> {
+        // Stub: Enable logic
+        Ok(())
+    }
+    fn disable(&mut self) -> Result<(), Box<dyn std::error::Error + Send>> {
+        // Stub: Disable logic
+        Ok(())
+    }
+}
 // src/motion/stepper.rs - Fixed duplicate Clone implementation
 
 #[derive(Debug, Clone)]

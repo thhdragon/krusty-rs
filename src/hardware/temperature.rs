@@ -1,6 +1,7 @@
 // src/temperature/control.rs
 use std::collections::VecDeque;
 use std::time::Instant;
+use super::hardware_traits::TemperatureControllerTrait;
 
 #[derive(Debug, Clone)]
 pub struct TemperatureController {
@@ -21,6 +22,23 @@ pub struct TemperatureController {
     /// Control history for tuning
     temperature_history: VecDeque<(Instant, f64)>,
     output_history: VecDeque<(Instant, f64)>,
+}
+
+impl TemperatureControllerTrait for TemperatureController {
+    fn set_target_temperature(&mut self, target: f64) {
+        self.set_target(target);
+    }
+
+    fn get_current_temperature(&self) -> f64 {
+        self.current_temperature
+    }
+
+    fn update(&mut self, dt: f64) -> Result<(), Box<dyn std::error::Error + Send>> {
+        // Simulate temperature update for demonstration
+        // In real hardware, this would read from a sensor
+        self.current_temperature += dt * 0.1; // Dummy update
+        Ok(())
+    }
 }
 
 impl TemperatureController {

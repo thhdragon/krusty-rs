@@ -279,6 +279,64 @@ impl MotionConfig {
     }
 }
 
+/// Configuration manager
+pub struct ConfigManager {
+    config: Config,
+    config_path: String,
+    backup_configs: Vec<Config>,
+}
+
+impl ConfigManager {
+    pub fn new(config: Config, config_path: String) -> Self {
+        Self {
+            config,
+            config_path,
+            backup_configs: Vec::new(),
+        }
+    }
+
+    pub fn load_config(config_path: &str) -> Result<Config, Box<dyn std::error::Error>> {
+        Ok(crate::config::load_config(config_path)?)
+    }
+
+    pub async fn save_config(&self, config: &Config) -> Result<(), Box<dyn std::error::Error>> {
+        use std::io::Write;
+        let toml_string = toml::to_string(config)?;
+        let mut file = std::fs::File::create(&self.config_path)?;
+        file.write_all(toml_string.as_bytes())?;
+        Ok(())
+    }
+
+    pub fn reload_config(&self) -> Result<Config, Box<dyn std::error::Error>> {
+        Self::load_config(&self.config_path)
+    }
+
+    pub fn get_config(&self) -> &Config {
+        &self.config
+    }
+
+    pub fn set_config(&mut self, config: Config) {
+        self.config = config;
+    }
+
+    pub fn backup_config(&mut self) {
+        self.backup_configs.push(self.config.clone());
+        // Keep only last 5 backups
+        while self.backup_configs.len() > 5 {
+            self.backup_configs.remove(0);
+        }
+    }
+
+    pub fn restore_backup(&mut self, index: usize) -> Result<(), Box<dyn std::error::Error>> {
+        if index < self.backup_configs.len() {
+            self.config = self.backup_configs[index].clone();
+            Ok(())
+        } else {
+            Err("Backup index out of range".into())
+        }
+    }
+}
+
 // Default value functions
 fn default_kinematics() -> String { "cartesian".to_string() }
 fn default_max_velocity() -> f64 { 300.0 }
