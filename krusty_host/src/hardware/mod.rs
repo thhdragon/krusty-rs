@@ -1,27 +1,6 @@
-use krusty_shared::hardware_traits::PeripheralTrait;
+use krusty_shared::{FanState, ThermistorState, HeaterState};
 use krusty_shared::board_config::BoardConfig;
-impl PeripheralTrait for FanController {
-    fn perform_action(&mut self, action: &str) -> Result<(), Box<dyn std::error::Error + Send>> {
-        match action {
-            "set_speed" => {
-                self.set_speed(128).map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)?;
-                Ok(())
-            }
-            _ => Err(Box::new(FanError::InvalidSpeed(128)) as Box<dyn std::error::Error + Send>),
-        }
-    }
-}
-impl PeripheralTrait for GenericSensor {
-    fn perform_action(&mut self, action: &str) -> Result<(), Box<dyn std::error::Error + Send>> {
-        match action {
-            "read" => {
-                self.read().map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)?;
-                Ok(())
-            }
-            _ => Err(Box::new(SensorError::ReadError) as Box<dyn std::error::Error + Send>),
-        }
-    }
-}
+// Removed orphan impl for ThermistorState
 // src/hardware/mod.rs
 // Declare the submodules within the `hardware` module
 pub mod temperature; // This refers to src/hardware/temperature.rs
@@ -62,21 +41,21 @@ pub struct HardwareManager {
     config: Config,
     board: BoardConfig,
     serial: Option<SerialPort>,
-    pub fan: FanController,
-    pub sensor: GenericSensor,
+    pub fan: FanState,
+    pub sensor: ThermistorState,
+    pub heater: HeaterState,
 }
 
 impl HardwareManager {
     pub fn new(config: Config, board: BoardConfig) -> Self {
-        // Example: Use board pin mapping for hardware initialization
         tracing::info!("Initializing hardware for board: {}", board.name);
-        // Use board.pins and board.timing as needed
         Self {
             config,
             board,
             serial: None,
-            fan: FanController::new(),
-            sensor: GenericSensor::new(),
+            fan: FanState { power: 0.0, is_on: false, rpm: 0.0 },
+            sensor: ThermistorState { measured_temp: 25.0, noise: 0.0, last_update: 0.0 },
+            heater: HeaterState { power: 0.0, target_temp: 0.0, current_temp: 25.0, is_on: false, runaway_detected: false, runaway_check_timer: 0.0, runaway_enabled: false },
         }
     }
 
@@ -196,62 +175,7 @@ impl Clone for HardwareManager {
             serial: None, // Can't clone the serial connection, so start fresh
             fan: self.fan.clone(),
             sensor: self.sensor.clone(),
+            heater: self.heater.clone(),
         }
     }
 }
-
-// --- Additional hardware abstraction stubs ---
-
-
-/// Fan controller abstraction (stub or real)
-#[derive(Debug, Clone)]
-pub struct FanController {
-    speed: u8, // 0-255
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum FanError {
-    #[error("Invalid speed: {0}")]
-    InvalidSpeed(u8),
-}
-
-impl FanController {
-    pub fn new() -> Self {
-        Self { speed: 0 }
-    }
-    pub fn set_speed(&mut self, speed: u8) -> Result<(), FanError> {
-        // TODO: Implement real fan speed control
-        self.speed = speed;
-        Ok(())
-    }
-    pub fn get_speed(&self) -> u8 {
-        self.speed
-    }
-}
-
-/// Generic sensor abstraction (stub or real)
-#[derive(Debug, Clone)]
-pub struct GenericSensor {
-    value: f64,
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum SensorError {
-    #[error("Sensor read error")]
-    ReadError,
-}
-
-impl GenericSensor {
-    pub fn new() -> Self {
-        Self { value: 0.0 }
-    }
-    pub fn set_value(&mut self, value: f64) {
-        self.value = value;
-    }
-    pub fn read(&self) -> Result<f64, SensorError> {
-        // TODO: Implement real sensor reading
-        Ok(self.value)
-    }
-}
-
-// TODO: Integrate FanController and GenericSensor with HardwareManager for testability and future hardware support.

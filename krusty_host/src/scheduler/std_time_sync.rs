@@ -1,4 +1,4 @@
-use crate::scheduler::time_interface::TimeInterface;
+use krusty_shared::TimeInterface;
 
 /// Standard time sync abstraction using std::time.
 /// Implements the TimeInterface trait using Rust's standard library.

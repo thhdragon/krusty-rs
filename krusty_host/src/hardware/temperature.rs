@@ -8,10 +8,4 @@
 
 // If any local methods or trait impls are needed for these types, implement them for the krusty_shared types here.
 
-#[derive(Debug, Clone)]
-pub struct TemperatureStatus {
-    pub current: f64,
-    pub target: f64,
-    pub error: f64,
-    pub output: f64,
-}
+// Remove TemperatureStatus struct and use krusty_shared::ThermistorState or HeaterState as needed

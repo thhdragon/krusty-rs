@@ -20,7 +20,8 @@
 
 use std::collections::VecDeque;
 use crate::config::Config;
-use crate::motion::kinematics::{Kinematics, create_kinematics};
+use krusty_shared::Kinematics;
+use crate::motion::kinematics::create_kinematics;
 use crate::motion::junction::JunctionDeviation;
 use krusty_shared::shaper::{PerAxisInputShapers, InputShaperType, ZVDShaper, SineWaveShaper};
 use krusty_shared::trajectory::{MotionQueueState, MotionError, MotionConfig, MotionType};
