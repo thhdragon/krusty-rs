@@ -1,4 +1,3 @@
-use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
 
@@ -10,7 +9,7 @@ use serde_json;
 use krusty_shared::{HeaterState, StepGenerator, StepCommand, ThermistorState, FanState, SwitchState, Position, HardwareState};
 use config as config_rs;
 use serde::Deserialize;
-use crossbeam_channel::{unbounded, Sender};
+use crossbeam_channel::unbounded;
 use krusty_shared::gcode_utils::{parse_gcode_line, parse_loop_conditional, parse_hardware_command};
 
 #[derive(Debug, Serialize)]
