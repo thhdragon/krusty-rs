@@ -1,4 +1,5 @@
 pub use controller::MotionController;
+pub use planner::MotionError; // Restore pub use planner::MotionError for use in host_os.rs and elsewhere
 // src/motion/mod.rs - Activate advanced features
 
 mod junction;
@@ -7,8 +8,6 @@ pub mod planner;
 pub mod controller;
 pub mod shaper;
 pub mod stepper;
-
-pub use planner::MotionError;
 
 use crate::hardware::board_config::BoardConfig;
 #[cfg(feature = "sim-in-host")]

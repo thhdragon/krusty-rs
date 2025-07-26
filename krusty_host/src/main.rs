@@ -1,11 +1,3 @@
-// src/main.rs - Enhanced main with motion mode selection
-mod gcode;
-mod motion;
-mod hardware;
-mod config;
-mod file_manager;
-mod web;
-
 use std::env;
 use tokio::sync::mpsc;
 use tokio::task::LocalSet;
@@ -16,6 +8,7 @@ use hardware::HardwareManager;
 use motion::MotionSystem;
 #[cfg(feature = "sim-in-host")]
 use krusty_simulator::simulator::Simulator;
+use krusty_host::*;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {

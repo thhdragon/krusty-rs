@@ -54,8 +54,6 @@ struct Claims {
     exp: usize,
 }
 
-type UserStore = Arc<Mutex<HashMap<String, String>>>;
-
 pub struct AppStateInner {
     pub printer_tx: Sender<PrinterRequest>,
     pub auth_backend: Box<dyn AuthBackend>,

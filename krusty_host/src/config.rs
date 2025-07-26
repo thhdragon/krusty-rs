@@ -25,7 +25,7 @@
 //! ## Example: Rust Usage
 //!
 //! ```rust
-//! use krusty_rs::config::Config;
+//! use krusty_host::config::Config;
 //! let toml_str = r#"
 //! [motion.shaper.x]
 //! type = "zvd"
