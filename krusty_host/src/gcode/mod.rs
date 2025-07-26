@@ -5,7 +5,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use crate::motion::MotionController;
 use crate::host_os::PrinterState;
-use krusty_shared::gcode::{MacroProcessor, GCodeError, OwnedGCodeCommand, GCodeCommand};
+use krusty_shared::gcode::{MacroProcessor, GCodeError, OwnedGCodeCommand};
 
 
 // Trait for executing parsed G-code commands in a real-world system.
