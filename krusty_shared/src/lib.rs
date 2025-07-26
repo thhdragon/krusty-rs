@@ -14,6 +14,8 @@ pub mod auth_backend;
 pub mod serial_interface;
 pub mod event_interface;
 pub mod config;
+pub mod file_manager;
+pub mod system_info;
 pub use auth_backend::InMemoryAuthBackend;
 
 // --- Shared Traits and Types ---

@@ -2,11 +2,12 @@ pub use controller::MotionController;
 pub use krusty_shared::trajectory::MotionError; // Use shared MotionError for use in host_os.rs and elsewhere
 // src/motion/mod.rs - Activate advanced features
 
-mod junction;
-mod kinematics;
+// mod junction; // migrated to krusty_shared
+// mod kinematics; // migrated to krusty_shared
+// pub mod stepper; // if not present, comment out
+
 pub mod planner;
 pub mod controller;
-pub mod stepper;
 
 use krusty_shared::board_config::BoardConfig;
 #[cfg(feature = "sim-in-host")]

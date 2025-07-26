@@ -1,30 +1,12 @@
 // src/file_manager.rs - Fixed file manager
 use std::path::Path;
 use std::time::SystemTime;
-use thiserror::Error;
+use krusty_shared::file_manager::{FileInfo, FileManagerError};
 use tokio::fs;
-
-#[derive(Debug, Error)]
-pub enum FileManagerError {
-    #[error("IO error: {0}")]
-    Io(#[from] std::io::Error),
-    #[error("UTF-8 error: {0}")]
-    Utf8(#[from] std::string::FromUtf8Error),
-    #[error("Other error: {0}")]
-    Other(String),
-}
 
 #[derive(Debug, Clone)]
 pub struct FileManager {
     current_directory: String,
-}
-
-#[derive(Debug, Clone)]
-pub struct FileInfo {
-    pub name: String,
-    pub size: u64,
-    pub is_directory: bool,
-    pub modified: SystemTime,
 }
 
 impl FileManager {
@@ -53,7 +35,7 @@ impl FileManager {
             Path::new(&self.current_directory).join(path).to_string_lossy().to_string()
         };
         tracing::info!("Reading G-code file: {}", use_path);
-        let content = fs::read_to_string(use_path).await?;
+        let content = fs::read_to_string(use_path).await.map_err(|e| FileManagerError::Io(e.to_string()))?;
         Ok(content)
     }
 
@@ -61,21 +43,21 @@ impl FileManager {
     pub async fn write_gcode_file(&self, path: &str, content: &str) -> Result<(), FileManagerError> {
         let use_path = if path.is_empty() || path == "." { &self.current_directory } else { path };
         tracing::info!("Writing G-code file: {}", use_path);
-        fs::write(use_path, content).await?;
+        fs::write(use_path, content).await.map_err(|e| FileManagerError::Io(e.to_string()))?;
         Ok(())
     }
 
     /// List files in a directory. Uses current_directory if path is empty or ".".
     pub async fn list_files(&self, path: &str) -> Result<Vec<FileInfo>, FileManagerError> {
         let use_path = if path.is_empty() || path == "." { &self.current_directory } else { path };
-        let mut entries = fs::read_dir(use_path).await?;
+        let mut entries = fs::read_dir(use_path).await.map_err(|e| FileManagerError::Io(e.to_string()))?;
         let mut files = Vec::new();
         
-        while let Some(entry) = entries.next_entry().await? {
+        while let Some(entry) = entries.next_entry().await.map_err(|e| FileManagerError::Io(e.to_string()))? {
             let path = entry.path();
             if let Some(file_name) = path.file_name() {
                 if let Some(name_str) = file_name.to_str() {
-                    let metadata = entry.metadata().await?;
+                    let metadata = entry.metadata().await.map_err(|e| FileManagerError::Io(e.to_string()))?;
                     let modified = match metadata.modified() {
                         Ok(m) => m,
                         Err(e) => {

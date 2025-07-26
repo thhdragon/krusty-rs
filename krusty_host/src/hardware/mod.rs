@@ -3,9 +3,9 @@ use krusty_shared::board_config::BoardConfig;
 // Removed orphan impl for ThermistorState
 // src/hardware/mod.rs
 // Declare the submodules within the `hardware` module
-pub mod temperature; // This refers to src/hardware/temperature.rs
+// pub mod temperature; // migrated to krusty_shared
 // pub mod hardware_traits; // Now provided by krusty_shared
-pub mod board_config; // Expose board configuration for hardware modules
+// pub mod board_config; // migrated to krusty_shared
 
 // Re-export items you want easily accessible from the `hardware` module level
 

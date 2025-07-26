@@ -1,7 +1,7 @@
 use crate::communication::serial_protocol::SerialProtocolStub;
 use crate::multi_mcu_manager::MultiMCUManagerStub;
 use crate::module_manager::ModuleManagerStub;
-use crate::system_info::SystemInfo;
+use krusty_shared::system_info::SystemInfo;
 // NOTE: Public API types (PrinterHostOS, SystemInfo, stubs) are re-exported via mod.rs and lib.rs
 // Only internal logic and trait implementations should remain here
 

@@ -21,8 +21,6 @@
 use std::collections::VecDeque;
 use crate::config::Config;
 use krusty_shared::Kinematics;
-use crate::motion::kinematics::create_kinematics;
-use crate::motion::junction::JunctionDeviation;
 use krusty_shared::shaper::{PerAxisInputShapers, InputShaperType, ZVDShaper, SineWaveShaper};
 use krusty_shared::trajectory::{MotionQueueState, MotionError, MotionConfig, MotionType};
 use krusty_shared::MotionConfigExt;
@@ -33,7 +31,6 @@ pub struct MotionPlanner {
     motion_queue: VecDeque<MotionSegment>,
     planner_state: PlannerState,
     kinematics: Box<dyn Kinematics + Send + Sync>,
-    junction_deviation: JunctionDeviation,
     pub input_shapers: PerAxisInputShapers, // Per-axis shapers (enum-based)
     state: MotionQueueState,
 }
@@ -109,11 +106,7 @@ impl MotionPlanner {
                 segment_time: 0.0,
                 last_update: std::time::Instant::now(),
             },
-            kinematics: create_kinematics(
-                planner_config.kinematics_type,
-                planner_config.axis_limits,
-            ),
-            junction_deviation: JunctionDeviation::new(planner_config.junction_deviation),
+            kinematics: todo!("Implement kinematics instantiation using shared crate or local logic"),
             input_shapers,
             state: MotionQueueState::Idle,
         }
@@ -191,7 +184,6 @@ impl MotionPlanner {
             exit_speed: limited_feedrate, // Start with max, will be optimized in passes
             motion_type,
         };
-        self.apply_junction_deviation(&mut segment)?;
         self.motion_queue.push_back(segment);
         self.current_position = target;
         if self.motion_queue.len() >= self.config.lookahead_buffer_size / 2 {
@@ -219,24 +211,6 @@ impl MotionPlanner {
         // Convert acceleration limit to velocity limit
         let acceleration_limited_feedrate = (2.0 * max_acceleration * distance).sqrt();
         requested_feedrate.min(acceleration_limited_feedrate).max(0.1)
-    }
-
-    /// Apply junction deviation optimization
-    fn apply_junction_deviation(&self, segment: &mut MotionSegment) -> Result<(), MotionError> {
-        // Calculate unit vector for this move
-        let unit_vector = self.calculate_unit_vector(&self.current_position, &segment.target);
-        // If there's a previous segment, calculate junction speed
-        if let Some(prev_segment) = self.motion_queue.back() {
-            let prev_unit_vector = self.calculate_unit_vector(&self.current_position, &prev_segment.target);
-            let junction_speed = self.junction_deviation.calculate_junction_speed(
-                &prev_unit_vector,
-                &unit_vector,
-                segment.acceleration,
-            );
-            // Limit entry speed by junction deviation
-            segment.entry_speed = segment.entry_speed.min(junction_speed);
-        }
-        Ok(())
     }
 
     /// Replan motion queue for optimal performance
@@ -273,13 +247,14 @@ impl MotionPlanner {
             };
             // Calculate junction speed if we have previous vector
             if let Some(prev_unit) = previous_unit_vector {
-                let junction_speed = self.junction_deviation.calculate_junction_speed(
-                    &prev_unit,
-                    &unit_vector,
-                    segments[i].acceleration,
-                );
+                // TODO: Calculate junction speed using available shared types or reimplement locally
+                // let junction_speed = self.junction_deviation.calculate_junction_speed(
+                //     &prev_unit,
+                //     &unit_vector,
+                //     segments[i].acceleration,
+                // );
                 // Limit entry speed by junction deviation
-                segments[i].entry_speed = segments[i].entry_speed.min(junction_speed);
+                // segments[i].entry_speed = segments[i].entry_speed.min(junction_speed);
             }
             // Calculate maximum exit speed based on acceleration and distance
             let max_exit_speed = ((segments[i].entry_speed * segments[i].entry_speed) + 
@@ -507,7 +482,7 @@ impl MotionPlanner {
     }
     pub fn set_junction_deviation(&mut self, jd: f64) {
         self.config.junction_deviation = jd;
-        self.junction_deviation = crate::motion::junction::JunctionDeviation::new(jd);
+        // TODO: Implement or call shared logic for junction deviation if/when available
     }
 
     pub fn lookahead_buffer_size(&self) -> usize {
@@ -557,7 +532,6 @@ impl Clone for MotionPlanner {
             motion_queue: self.motion_queue.clone(),
             planner_state: self.planner_state.clone(),
             kinematics: self.kinematics.clone_box(),
-            junction_deviation: self.junction_deviation.clone(),
             input_shapers: self.input_shapers.clone(), // Properly clone PerAxisInputShapers
             state: self.state.clone(),
         }
@@ -572,7 +546,6 @@ impl std::fmt::Debug for MotionPlanner {
             .field("motion_queue_len", &self.motion_queue.len())
             .field("planner_state", &self.planner_state)
             .field("kinematics", &"Box<dyn Kinematics + Send>")
-            .field("junction_deviation", &self.junction_deviation)
             .field("state", &self.state)
             .finish()
     }

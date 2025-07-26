@@ -11,15 +11,14 @@ pub use config::Config;
 pub use config::MotionConfig;
 pub mod gcode;
 pub use krusty_shared::gcode::{GCodeCommand, GCodeParser, GCodeParserConfig, MacroProcessor};
-pub mod print_job;
-pub use print_job::*;
+// pub mod print_job; // migrated to krusty_shared or handled via direct use
 pub mod file_manager;
 pub use file_manager::*;
 pub mod host_os;
 pub use crate::host_os::PrinterHostOS;
 pub use host_os::PrinterState;
 pub mod system_info;
-pub use system_info::SystemInfo;
+pub use krusty_shared::system_info::SystemInfo;
 pub mod motion;
 pub use motion::*;
 pub use krusty_shared::trajectory::MotionConfig as PlannerMotionConfig;
