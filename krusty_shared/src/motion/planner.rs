@@ -1,29 +1,12 @@
-// # Motion Planner: Config-Driven Shaper and Blending Assignment
-//
-// This module integrates advanced motion planning with per-axis input shaper and blending configuration.
-//
-// ## Usage Example
-//
-// 1. Define your shaper/blending config in TOML (see `config.rs` docs).
-// 2. Parse your config and construct the planner:
-//
-// use crate::config::Config;
-// use crate::motion::planner::MotionPlanner;
-// let config: Config = toml::from_str(toml_str).unwrap();
-// let planner = MotionPlanner::new_from_config(&config);
-// // The planner will assign the correct shaper to each axis at runtime.
-//
-// - Extendable: Add new shaper types or parameters by updating the config schema and Rust enums.
-// - See also: `src/config.rs` for config structs and validation, `src/motion/shaper.rs` for shaper implementations.
-
-// src/motion/planner/mod.rs
+// krusty_shared::motion::planner.rs
+// Core motion planning logic migrated from krusty_host
 
 use std::collections::VecDeque;
 use crate::config::Config;
-use krusty_shared::Kinematics;
-use krusty_shared::shaper::{PerAxisInputShapers, InputShaperType, ZVDShaper, SineWaveShaper};
-use krusty_shared::trajectory::{MotionQueueState, MotionError, MotionConfig, MotionType};
-use krusty_shared::MotionConfigExt;
+use crate::Kinematics;
+use crate::shaper::{PerAxisInputShapers, InputShaperType, ZVDShaper, SineWaveShaper};
+use crate::trajectory::{MotionQueueState, MotionError, MotionConfig, MotionType};
+use crate::MotionConfigExt;
 
 pub struct MotionPlanner {
     config: MotionConfig, // Store the config!
@@ -36,39 +19,34 @@ pub struct MotionPlanner {
 }
 
 #[derive(Debug, Clone)]
-pub struct MotionSegment { // Was MotionBlock
+pub struct MotionSegment {
     pub target: [f64; 4],
     pub feedrate: f64,
-    pub limited_feedrate: f64, // Will be calculated
+    pub limited_feedrate: f64,
     pub distance: f64,
-    pub duration: f64, // Will be calculated
-    pub acceleration: f64, // Will be calculated or placeholder
-    pub entry_speed: f64, // Placeholder for now
-    pub exit_speed: f64, // Placeholder for now
+    pub duration: f64,
+    pub acceleration: f64,
+    pub entry_speed: f64,
+    pub exit_speed: f64,
     pub motion_type: MotionType,
 }
 
-// Internal state for the planner
 #[derive(Debug, Clone)]
-struct PlannerState {
-    active: bool,
-    current_segment: Option<MotionSegment>,
-    segment_time: f64,
-    last_update: std::time::Instant,
+pub struct PlannerState {
+    pub active: bool,
+    pub current_segment: Option<MotionSegment>,
+    pub segment_time: f64,
+    pub last_update: std::time::Instant,
 }
 
 impl MotionPlanner {
     pub fn new(_config: MotionConfig) -> Self {
-        // Prefer config-driven construction; use new_from_config for all planner creation
-        // This function is retained for compatibility but delegates to new_from_config
-        // You must pass a Config (not just MotionConfig) to use config-driven shaper/blending
         panic!("Use MotionPlanner::new_from_config(&Config) for config-driven planner construction");
     }
 
     pub fn new_from_config(config: &Config) -> Self {
         let planner_config = MotionConfig::new_from_config(config);
-        // --- Input shaper integration ---
-        let mut input_shapers = PerAxisInputShapers::new(4); // X, Y, Z, E
+        let mut input_shapers = PerAxisInputShapers::new(4);
         if let Some(motion_cfg) = &config.motion {
             for (axis_name, shaper_cfg) in &motion_cfg.shaper {
                 let axis_idx = match axis_name.as_str() {
@@ -76,20 +54,18 @@ impl MotionPlanner {
                     "y" | "Y" => 1,
                     "z" | "Z" => 2,
                     "e" | "E" => 3,
-                    _ => continue, // Ignore unknown axes
+                    _ => continue,
                 };
                 let shaper = match shaper_cfg.r#type {
                     crate::config::ShaperType::Zvd => {
-                        // Example: ZVDShaper with delay and coeffs (stub, real params TBD)
                         let delay = 1;
                         let coeffs = [1.0, 0.0];
                         InputShaperType::ZVD(ZVDShaper::new(delay, coeffs))
                     }
                     crate::config::ShaperType::Sine => {
-                        // Map config fields to SineWaveShaper
-                        let magnitude = 1.0; // Could be configurable
+                        let magnitude = 1.0;
                         let frequency = shaper_cfg.frequency as f64;
-                        let sample_time = 0.01; // Example value
+                        let sample_time = 0.01;
                         InputShaperType::SineWave(SineWaveShaper::new(magnitude, frequency, sample_time))
                     }
                 };
@@ -181,7 +157,7 @@ impl MotionPlanner {
             duration: distance / limited_feedrate.max(0.1),
             acceleration: self.calculate_acceleration(&target),
             entry_speed: self.motion_queue.back().map_or(0.0, |prev| prev.exit_speed),
-            exit_speed: limited_feedrate, // Start with max, will be optimized in passes
+            exit_speed: limited_feedrate,
             motion_type,
         };
         self.motion_queue.push_back(segment);
@@ -192,14 +168,12 @@ impl MotionPlanner {
         Ok(())
     }
 
-    /// Limit feedrate based on acceleration capabilities
     fn limit_feedrate_by_acceleration(&self, target: &[f64; 4], requested_feedrate: f64) -> f64 {
         let distance = self.calculate_distance(&self.current_position, target);
         if distance == 0.0 {
             return requested_feedrate;
         }
         let unit_vector = self.calculate_unit_vector(&self.current_position, target);
-        // Find limiting acceleration for each axis
         let mut max_acceleration = f64::INFINITY;
         for i in 0..4 {
             let axis_component = unit_vector[i].abs();
@@ -208,44 +182,34 @@ impl MotionPlanner {
                 max_acceleration = max_acceleration.min(axis_accel_limit);
             }
         }
-        // Convert acceleration limit to velocity limit
         let acceleration_limited_feedrate = (2.0 * max_acceleration * distance).sqrt();
         requested_feedrate.min(acceleration_limited_feedrate).max(0.1)
     }
 
-    /// Replan motion queue for optimal performance
     async fn replan_queue(&mut self) -> Result<(), MotionError> {
         let queue_len = self.motion_queue.len();
         if queue_len < 2 {
             return Ok(());
         }
         tracing::debug!("Replanning {} motion segments", queue_len);
-        // Convert to vector for easier manipulation
         let mut segments: Vec<MotionSegment> = self.motion_queue.drain(..).collect();
-        // Forward pass: calculate entry/exit speeds
         self.forward_pass(&mut segments)?;
-        // Backward pass: optimize speeds
         self.backward_pass(&mut segments)?;
-        // Recalculate durations with optimized speeds
         self.recalculate_durations(&mut segments)?;
-        // Put optimized segments back in queue
         for segment in segments {
             self.motion_queue.push_back(segment);
         }
         Ok(())
     }
 
-    /// Forward pass through motion segments
     fn forward_pass(&mut self, segments: &mut [MotionSegment]) -> Result<(), MotionError> {
         let mut previous_unit_vector = None;
         for i in 0..segments.len() {
-            // Calculate unit vector for this move
             let unit_vector = if i == 0 {
                 self.calculate_unit_vector(&self.current_position, &segments[i].target)
             } else {
                 self.calculate_unit_vector(&segments[i-1].target, &segments[i].target)
             };
-            // Calculate junction speed if we have previous vector
             if let Some(prev_unit) = previous_unit_vector {
                 // TODO: Calculate junction speed using available shared types or reimplement locally
                 // let junction_speed = self.junction_deviation.calculate_junction_speed(
@@ -253,33 +217,26 @@ impl MotionPlanner {
                 //     &unit_vector,
                 //     segments[i].acceleration,
                 // );
-                // Limit entry speed by junction deviation
                 // segments[i].entry_speed = segments[i].entry_speed.min(junction_speed);
             }
-            // Calculate maximum exit speed based on acceleration and distance
             let max_exit_speed = ((segments[i].entry_speed * segments[i].entry_speed) + 
                                  2.0 * segments[i].acceleration * segments[i].distance).sqrt();
             segments[i].exit_speed = segments[i].limited_feedrate.min(max_exit_speed);
-            // Update for next iteration
             previous_unit_vector = Some(unit_vector);
         }
         Ok(())
     }
 
-    /// Backward pass through motion segments
     fn backward_pass(&mut self, segments: &mut [MotionSegment]) -> Result<(), MotionError> {
         for i in (0..segments.len()).rev() {
             let exit_speed = if i == segments.len() - 1 {
-                0.0 // Last segment stops
+                0.0
             } else {
                 segments[i + 1].entry_speed
             };
-            // Calculate maximum entry speed based on exit speed and deceleration
             let max_entry_speed = ((exit_speed * exit_speed) + 
                                   2.0 * segments[i].acceleration * segments[i].distance).sqrt();
-            // Limit entry speed
             segments[i].entry_speed = segments[i].entry_speed.min(max_entry_speed);
-            // Recalculate exit speed based on limited entry speed
             segments[i].exit_speed = ((segments[i].entry_speed * segments[i].entry_speed) + 
                                      2.0 * segments[i].acceleration * segments[i].distance).sqrt()
                                      .min(segments[i].limited_feedrate);
@@ -287,24 +244,20 @@ impl MotionPlanner {
         Ok(())
     }
 
-    /// Recalculate segment durations with optimized speeds
     fn recalculate_durations(&mut self, segments: &mut [MotionSegment]) -> Result<(), MotionError> {
         for segment in segments {
-            // For trapezoidal profile: t = (v_end - v_start + sqrt((v_end - v_start)² + 2*a*d)) / a
             let delta_v = segment.exit_speed - segment.entry_speed;
             let discriminant = delta_v * delta_v + 2.0 * segment.acceleration * segment.distance;
             if discriminant >= 0.0 {
                 let time = (delta_v + discriminant.sqrt()) / segment.acceleration;
                 segment.duration = time.max(0.0);
             } else {
-                // Fallback - should not happen with proper optimization
                 segment.duration = segment.distance / segment.limited_feedrate;
             }
         }
         Ok(())
     }
 
-    /// Calculate unit vector between two positions
     fn calculate_unit_vector(&self, start: &[f64; 4], end: &[f64; 4]) -> [f64; 4] {
         let delta = [
             end[0] - start[0],
@@ -326,7 +279,6 @@ impl MotionPlanner {
         }
     }
 
-    /// Calculate 3D Euclidean distance
     fn calculate_distance(&self, start: &[f64; 4], end: &[f64; 4]) -> f64 {
         let dx = end[0] - start[0];
         let dy = end[1] - start[1];
@@ -335,14 +287,12 @@ impl MotionPlanner {
         (dx * dx + dy * dy + dz * dz + de * de).sqrt()
     }
 
-    /// Calculate appropriate acceleration for a move
     fn calculate_acceleration(&self, target: &[f64; 4]) -> f64 {
         let distance = self.calculate_distance(&self.current_position, target);
         if distance == 0.0 {
             return self.config.max_acceleration[0];
         }
         let unit_vector = self.calculate_unit_vector(&self.current_position, target);
-        // Weighted average based on axis movement
         let weighted_accel = 
             unit_vector[0].abs() * self.config.max_acceleration[0] +
             unit_vector[1].abs() * self.config.max_acceleration[1] +
@@ -351,31 +301,23 @@ impl MotionPlanner {
         weighted_accel
     }
 
-    /// Main update function - called at high frequency
     pub async fn update(&mut self) -> Result<(), MotionError> {
-        // Respect queue state
         match self.state {
             MotionQueueState::Paused => {
-                // Do nothing, hold current segment/queue
                 return Ok(());
             }
             MotionQueueState::Cancelled => {
-                // Already cleared, set to Idle
                 self.state = MotionQueueState::Idle;
                 return Ok(());
             }
             MotionQueueState::Idle => {
-                // Do nothing if idle
                 return Ok(());
             }
-            MotionQueueState::Running => {
-                // Continue as normal
-            }
+            MotionQueueState::Running => {}
         }
         let now = std::time::Instant::now();
         let dt = (now - self.planner_state.last_update).as_secs_f64();
         self.planner_state.last_update = now;
-        // Check if we need to start a new segment
         if self.planner_state.current_segment.is_none() {
             if let Some(segment) = self.motion_queue.pop_front() {
                 self.planner_state.current_segment = Some(segment);
@@ -388,13 +330,10 @@ impl MotionPlanner {
                 return Ok(());
             }
         }
-        // Process current segment
         let mut clear_segment = false;
         if let Some(ref mut segment) = self.planner_state.current_segment {
             self.planner_state.segment_time += dt;
-            // Check if segment is complete
             if self.planner_state.segment_time >= segment.duration {
-                // Segment complete - update position
                 self.current_position = segment.target;
                 clear_segment = true;
                 tracing::debug!(
@@ -402,19 +341,15 @@ impl MotionPlanner {
                     segment.target[0], segment.target[1], segment.target[2], segment.target[3]
                 );
             } else {
-                // Interpolate position within segment
                 let progress = self.planner_state.segment_time / segment.duration;
-                // Simple linear interpolation (in advanced version, use proper motion profiles)
                 let current_pos = [
                     self.current_position[0] + (segment.target[0] - self.current_position[0]) * progress,
                     self.current_position[1] + (segment.target[1] - self.current_position[1]) * progress,
                     self.current_position[2] + (segment.target[2] - self.current_position[2]) * progress,
                     self.current_position[3] + (segment.target[3] - self.current_position[3]) * progress,
                 ];
-                // Copy segment for use after borrow ends
                 let segment_copy = segment.clone();
-                let _ = segment; // End mutable borrow
-                // Generate steps for current position
+                let _ = segment;
                 self.generate_steps(&current_pos, &segment_copy).await?;
             }
         }
@@ -424,18 +359,15 @@ impl MotionPlanner {
         Ok(())
     }
 
-    /// Generate step commands for current position
     async fn generate_steps(
         &mut self,
         position: &[f64; 4],
         segment: &MotionSegment,
     ) -> Result<(), MotionError> {
-        // Apply input shaping per axis using PerAxisInputShapers
         let mut shaped_position = [0.0; 4];
         for i in 0..4 {
             shaped_position[i] = self.input_shapers.do_step(i, position[i]);
         }
-        // Convert Cartesian position to motor positions
         let cartesian = [shaped_position[0], shaped_position[1], shaped_position[2]];
         let motor_positions = self.kinematics.cartesian_to_motors(&cartesian)
             .map_err(|e| MotionError::Other(e.to_string()))?;
@@ -467,11 +399,9 @@ impl MotionPlanner {
         self.current_position
     }
 
-    // Add other necessary methods like set_position, home, etc.
     pub fn set_position(&mut self, position: [f64; 4]) {
         self.current_position = position;
         tracing::debug!("Planner position set to {:?}", position);
-        // If there's a current segment, this might need more careful handling depending on sync strategy.
     }
 
     pub fn set_max_acceleration(&mut self, max_accel: [f64; 4]) {
@@ -482,7 +412,6 @@ impl MotionPlanner {
     }
     pub fn set_junction_deviation(&mut self, jd: f64) {
         self.config.junction_deviation = jd;
-        // TODO: Implement or call shared logic for junction deviation if/when available
     }
 
     pub fn lookahead_buffer_size(&self) -> usize {
@@ -490,12 +419,37 @@ impl MotionPlanner {
     }
 }
 
-pub mod adaptive;
+impl Clone for MotionPlanner {
+    fn clone(&self) -> Self {
+        Self {
+            config: self.config.clone(),
+            current_position: self.current_position,
+            motion_queue: self.motion_queue.clone(),
+            planner_state: self.planner_state.clone(),
+            kinematics: self.kinematics.clone_box(),
+            input_shapers: self.input_shapers.clone(),
+            state: self.state.clone(),
+        }
+    }
+}
 
-/// Configuration for advanced motion features (input shapers, blending)
+impl std::fmt::Debug for MotionPlanner {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MotionPlanner")
+            .field("current_position", &self.current_position)
+            .field("motion_queue_len", &self.motion_queue.len())
+            .field("planner_state", &self.planner_state)
+            .field("kinematics", &"Box<dyn Kinematics + Send>")
+            .field("state", &self.state)
+            .finish()
+    }
+}
+
+// Adaptive logic is in krusty_shared::motion::adaptive
+
 #[derive(Debug, Clone)]
 pub struct AdvancedMotionConfig {
-    pub input_shapers: Option<Vec<Option<InputShaperType>>>, // Per-axis
+    pub input_shapers: Option<Vec<Option<InputShaperType>>>,
     pub bezier_blending: Option<BezierBlendingConfig>,
 }
 
@@ -509,44 +463,12 @@ pub struct BezierBlendingConfig {
 impl Default for AdvancedMotionConfig {
     fn default() -> Self {
         Self {
-            input_shapers: None, // No shapers by default
+            input_shapers: None,
             bezier_blending: Some(BezierBlendingConfig {
                 enabled: false,
                 degree: 15,
                 max_deviation: 0.5,
             }),
         }
-    }
-}
-
-// Example: Accept AdvancedMotionConfig in MotionPlanner::new
-// and use it to configure input shapers and blending
-// (Stub for future config file/API integration)
-
-// Implement Clone manually if needed and direct fields support it
-impl Clone for MotionPlanner {
-    fn clone(&self) -> Self {
-        Self {
-            config: self.config.clone(),
-            current_position: self.current_position,
-            motion_queue: self.motion_queue.clone(),
-            planner_state: self.planner_state.clone(),
-            kinematics: self.kinematics.clone_box(),
-            input_shapers: self.input_shapers.clone(), // Properly clone PerAxisInputShapers
-            state: self.state.clone(),
-        }
-    }
-}
-
-// Implement Debug manually if needed due to non-Debug fields
-impl std::fmt::Debug for MotionPlanner {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("MotionPlanner")
-            .field("current_position", &self.current_position)
-            .field("motion_queue_len", &self.motion_queue.len())
-            .field("planner_state", &self.planner_state)
-            .field("kinematics", &"Box<dyn Kinematics + Send>")
-            .field("state", &self.state)
-            .finish()
     }
 }

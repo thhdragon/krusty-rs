@@ -17,8 +17,6 @@ pub use file_manager::*;
 pub mod host_os;
 pub use crate::host_os::PrinterHostOS;
 pub use host_os::PrinterState;
-pub mod system_info;
-pub use krusty_shared::system_info::SystemInfo;
 pub mod motion;
 pub use motion::*;
 pub use krusty_shared::trajectory::MotionConfig as PlannerMotionConfig;

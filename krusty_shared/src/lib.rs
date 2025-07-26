@@ -1,5 +1,7 @@
 // krusty_shared: shared traits and types for host, simulator, and MCU
 
+pub mod motion;
+
 pub mod event_queue;
 pub mod gcode;
 pub mod gcode_utils;

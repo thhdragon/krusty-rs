@@ -6,7 +6,7 @@ pub use krusty_shared::trajectory::MotionError; // Use shared MotionError for us
 // mod kinematics; // migrated to krusty_shared
 // pub mod stepper; // if not present, comment out
 
-pub mod planner;
+// pub mod planner; // Removed: now using krusty_shared::motion::planner
 pub mod controller;
 
 use krusty_shared::board_config::BoardConfig;

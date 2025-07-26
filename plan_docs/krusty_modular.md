@@ -67,62 +67,38 @@ Centralizing shared logic in `krusty_shared`:
 - Enables simulator-first and CI-driven development workflows
 - Keeps application, firmware, and simulation logic cleanly separated
 
----
+## Findings: Logic to Move from `krusty_host` to `krusty_shared`
 
-# Findings: Logic in `krusty_host` Suitable for `krusty_shared`
+### 1. Motion Planning and Kinematics
+- **MotionPlanner**, **MotionSegment**, **PlannerState**, and related logic in `motion/planner/mod.rs`:
+  - All core motion planning algorithms, segment structures, and config-driven shaper/blending logic are hardware-agnostic and should be shared.
+  - The kinematics trait and instantiation should be unified with the shared crate.
+- **Adaptive Motion Planning** in `motion/planner/adaptive.rs`:
+  - Types such as `AdaptiveConfig`, `PerformanceData`, `OptimizationParams`, `ResonancePeak`, `AdaptiveOptimizer`, `PerformanceMetrics`, `TrainingSample`, `PerformanceMonitor`, `ErrorPredictor`, `VibrationAnalysis`, and `VibrationAnalyzer` are all reusable, hardware-agnostic logic.
+  - The `AdaptiveMotionPlanner` wrapper and its logic should also be shared.
+- **MotionController** in `motion/controller.rs`:
+  - The core logic for queueing, updating, and managing motion should be abstracted for reuse by both host and simulator.
+  - The `MotionMode` enum and feature toggling logic are also candidates for sharing.
 
-## 1. G-code Parsing and Macro Expansion
-- **Files:** `gcode/parser.rs`, `gcode/macros.rs`, `gcode/mod.rs`
-- **Why:** G-code parsing, macro expansion, and command models are hardware-agnostic and required by both host and simulator. These should be unified in `krusty_shared` for consistent parsing and macro behavior.
+### 2. G-code Processing
+- **GCodeProcessor** in `gcode/mod.rs`:
+  - The logic for parsing, expanding, and dispatching G-code commands is hardware-agnostic and should be shared.
+  - The `GCodeExecutor` trait in `gcode/gcode_executor.rs` is a pure interface and should be moved to shared.
 
-## 2. Hardware Traits and Board Config
-- **Files:** `hardware/hardware_traits.rs`, `hardware/board_config.rs`
-- **Why:** Traits and config types for hardware abstraction are already referenced in `krusty_shared`. Ensure all trait definitions and board config types are defined in `krusty_shared`, not duplicated in host.
+### 3. File Management
+- **FileManager** in `file_manager.rs`:
+  - The logic for reading, writing, and listing files, as well as processing G-code files, is generic and can be shared (with async/await support).
 
-## 3. Motion Planning, Kinematics, and Junction Logic
-- **Files:** `motion/kinematics.rs`, `motion/junction.rs`, `motion/planner/`, `motion/controller.rs`
-- **Why:** Core motion planning, kinematics, and junction deviation logic are reusable for both real and simulated hardware. These should be moved to `krusty_shared` as pure logic modules.
+### 4. Hardware Traits and State
+- **HardwareManager** in `hardware/mod.rs`:
+  - The struct itself is hardware-specific, but the error types (`HardwareError`), state types (`FanState`, `ThermistorState`, `HeaterState`), and command statistics (`CommandStats`) are generic and should be shared.
+  - Any trait-based abstractions for hardware should be unified in `krusty_shared::hardware_traits`.
 
-## 4. Event Queue and Event Interface
-- **Files:** `communication/event_interface.rs`, `communication/event_system.rs`
-- **Why:** Event queueing and event trait definitions are cross-cutting concerns. Move trait definitions and pure event types to `krusty_shared`.
+### 5. Statistics and State Types
+- **QueueStats** in `motion/mod.rs` and **CommandStats** in `hardware/mod.rs`:
+  - These are generic statistics types and should be shared.
 
-## 5. Print Job Management
-- **Files:** `print_job.rs`
-- **Why:** Print job state, job queueing, and job models are logic that can be reused by both host and simulator. Move core types and logic to `krusty_shared`.
-
-## 6. File Management Utilities
-- **Files:** `file_manager.rs`
-- **Why:** File info types and pure file utilities (not OS-specific logic) are reusable. Move generic file models and helpers to `krusty_shared`.
-
-## 7. API Models and Auth Traits
-- **Files:** `web/models.rs`, `web/auth.rs`
-- **Why:** API data models and authentication trait definitions are shared between host and simulator (and potentially web clients). Move these to `krusty_shared`.
-
-## 8. System Info and Utility Types
-- **Files:** `system_info.rs`
-- **Why:** System info types and utility structs that are not OS-specific should be moved to `krusty_shared`.
+### 6. Configuration Types
+- Any configuration structures or enums that are referenced by both host and simulator (e.g., shaper types, planner config) should be defined in `krusty_shared::config`.
 
 ---
-
-# Migration Plan: Host → Shared
-
-```markdown
-- [ ] 1. Move G-code parsing, macro expansion, and command models to `krusty_shared`
-- [ ] 2. Move all hardware trait definitions and board config types to `krusty_shared`
-- [ ] 3. Move motion planning, kinematics, and junction logic to `krusty_shared`
-- [ ] 4. Move event queue traits and pure event types to `krusty_shared`
-- [ ] 5. Move print job state and queue logic to `krusty_shared`
-- [ ] 6. Move generic file info types and helpers to `krusty_shared`
-- [ ] 7. Move API models and auth traits to `krusty_shared`
-- [ ] 8. Move system info and utility types to `krusty_shared`
-- [ ] 9. Refactor host and simulator to use shared logic from `krusty_shared`
-- [ ] 10. Remove any duplicated or obsolete logic from `krusty_host`
-- [ ] 11. Validate with tests and CI for both host and simulator
-```
-
-**Note:** Only pure, hardware-agnostic, and reusable logic should be moved. OS-specific, hardware-specific, or application orchestration code must remain in `krusty_host`.
-
----
-
-This plan ensures a clean separation of concerns, maximizes code reuse, and aligns with the modular architecture described above.

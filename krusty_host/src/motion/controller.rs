@@ -3,11 +3,10 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use crate::host_os::PrinterState;
 use crate::hardware::HardwareManager;
-use crate::motion::planner::MotionPlanner;
-use crate::motion::planner::adaptive::{PerformanceMonitor, VibrationAnalyzer, PerformanceMetrics, AdaptiveOptimizer, AdaptiveConfig};
+use krusty_shared::motion::planner::MotionPlanner;
+use krusty_shared::motion::adaptive::{PerformanceMonitor, VibrationAnalyzer, PerformanceMetrics, AdaptiveOptimizer, AdaptiveConfig};
 use krusty_shared::trajectory::{MotionError, MotionQueueState};
 use krusty_shared::trajectory::MotionType;
-use krusty_shared::MotionConfigExt;
 
 #[derive(Debug, Clone)]
 // MotionController struct definition follows

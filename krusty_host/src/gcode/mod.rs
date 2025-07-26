@@ -8,6 +8,13 @@ use crate::host_os::PrinterState;
 use krusty_shared::gcode::{MacroProcessor, GCodeError, OwnedGCodeCommand};
 
 
+// Trait for executing parsed G-code commands in a real-world system.
+
+pub trait GCodeExecutor: Send {
+    fn execute(&mut self, cmd: krusty_shared::gcode::GCodeCommand<'static>);
+}
+
+
 #[derive(Debug, Clone)] // This should work now
 pub struct GCodeProcessor {
     state: Arc<RwLock<PrinterState>>,
