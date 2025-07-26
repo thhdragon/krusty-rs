@@ -1,54 +1,33 @@
-use thiserror::Error;
-#[derive(Debug, Error)]
-pub enum PrintJobError {
-    #[error("No job available")] 
-    NoJob,
-    #[error("Invalid state transition: {0}")]
-    InvalidTransition(String),
-    #[error("Channel send error: {0}")]
-    ChannelSend(#[from] tokio::sync::mpsc::error::SendError<Result<GCodeCommand<'static>, GCodeError>>),
-}
-// src/print_job.rs
-
-use crate::GCodeCommand;
-use crate::gcode::parser::GCodeError;
-use std::sync::Arc;
-use tokio::sync::Mutex;
 use futures_core::stream::Stream;
 use futures_util::StreamExt;
-use crate::gcode::parser::{OwnedGCodeCommand, OwnedGCodeError};
+use krusty_shared::print_job::{JobState, PrintJobError, PrintJob as SharedPrintJob};
+use crate::gcode::parser::{GCodeCommand, GCodeError, OwnedGCodeCommand, OwnedGCodeError};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use std::collections::VecDeque;
 use tokio::sync::mpsc::Sender;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum JobState {
-    Queued,
-    Running,
-    Paused,
-    Completed,
-    Cancelled,
-    Error(String),
-}
-
 #[derive(Debug)]
 pub struct PrintJob {
-    pub id: u64,
-    pub state: JobState,
+    pub inner: SharedPrintJob,
     pub commands: VecDeque<Result<GCodeCommand<'static>, GCodeError>>,
-    pub progress: f32,
 }
 
 impl PrintJob {
     pub fn new(id: u64, commands: Vec<Result<GCodeCommand<'static>, GCodeError>>) -> Self {
         Self {
-            id,
-            state: JobState::Queued,
+            inner: SharedPrintJob::new(id),
             commands: VecDeque::from(commands),
-            progress: 0.0,
         }
     }
+    pub fn id(&self) -> u64 { self.inner.id }
+    pub fn state(&self) -> &JobState { &self.inner.state }
+    pub fn state_mut(&mut self) -> &mut JobState { &mut self.inner.state }
+    pub fn progress(&self) -> f32 { self.inner.progress }
+    pub fn progress_mut(&mut self) -> &mut f32 { &mut self.inner.progress }
 }
 
+#[derive(Debug)]
 pub struct PrintJobManager {
     pub jobs: Arc<Mutex<VecDeque<PrintJob>>>,
     pub next_id: Arc<Mutex<u64>>, // For unique job IDs
@@ -67,11 +46,11 @@ impl PrintJobManager {
     pub async fn process_current_job(&self) -> Result<(), PrintJobError> {
         let mut jobs = self.jobs.lock().await;
         if let Some(job) = jobs.front_mut() {
-            if job.state == JobState::Running {
+            if job.state() == &JobState::Running {
                 while let Some(cmd) = job.commands.pop_front() {
-                    self.command_sender.send(cmd).await?;
+                    self.command_sender.send(cmd).await.map_err(|e| PrintJobError::ChannelSend(e.to_string()))?;
                 }
-                job.state = JobState::Completed;
+                *job.state_mut() = JobState::Completed;
                 Ok(())
             } else {
                 Err(PrintJobError::InvalidTransition("Job is not running".to_string()))
@@ -97,10 +76,10 @@ impl PrintJobManager {
     pub async fn start_next_job(&self) -> Result<u64, PrintJobError> {
         let mut jobs = self.jobs.lock().await;
         if let Some(job) = jobs.front_mut() {
-            match job.state {
+            match job.state() {
                 JobState::Queued => {
-                    job.state = JobState::Running;
-                    Ok(job.id)
+                    *job.state_mut() = JobState::Running;
+                    Ok(job.id())
                 },
                 _ => Err(PrintJobError::InvalidTransition("Job is not queued".to_string())),
             }
@@ -113,10 +92,10 @@ impl PrintJobManager {
     pub async fn pause_current_job(&self) -> Result<u64, PrintJobError> {
         let mut jobs = self.jobs.lock().await;
         if let Some(job) = jobs.front_mut() {
-            match job.state {
+            match job.state() {
                 JobState::Running => {
-                    job.state = JobState::Paused;
-                    Ok(job.id)
+                    *job.state_mut() = JobState::Paused;
+                    Ok(job.id())
                 },
                 JobState::Paused => Err(PrintJobError::InvalidTransition("Job is already paused".to_string())),
                 JobState::Completed => Err(PrintJobError::InvalidTransition("Cannot pause a completed job".to_string())),
@@ -132,10 +111,10 @@ impl PrintJobManager {
     pub async fn resume_current_job(&self) -> Result<u64, PrintJobError> {
         let mut jobs = self.jobs.lock().await;
         if let Some(job) = jobs.front_mut() {
-            match job.state {
+            match job.state() {
                 JobState::Paused => {
-                    job.state = JobState::Running;
-                    Ok(job.id)
+                    *job.state_mut() = JobState::Running;
+                    Ok(job.id())
                 },
                 JobState::Running => Err(PrintJobError::InvalidTransition("Job is already running".to_string())),
                 JobState::Completed => Err(PrintJobError::InvalidTransition("Cannot resume a completed job".to_string())),
@@ -151,10 +130,10 @@ impl PrintJobManager {
     pub async fn cancel_current_job(&self) -> Result<u64, PrintJobError> {
         let mut jobs = self.jobs.lock().await;
         if let Some(job) = jobs.front_mut() {
-            match job.state {
+            match job.state() {
                 JobState::Running | JobState::Paused | JobState::Queued => {
-                    job.state = JobState::Cancelled;
-                    Ok(job.id)
+                    *job.state_mut() = JobState::Cancelled;
+                    Ok(job.id())
                 },
                 JobState::Completed => Err(PrintJobError::InvalidTransition("Cannot cancel a completed job".to_string())),
                 JobState::Cancelled => Err(PrintJobError::InvalidTransition("Job is already cancelled".to_string())),
@@ -169,10 +148,10 @@ impl PrintJobManager {
     pub async fn next_command(&self) -> Result<Option<Result<GCodeCommand<'static>, GCodeError>>, PrintJobError> {
         let mut jobs = self.jobs.lock().await;
         if let Some(job) = jobs.front_mut() {
-            if job.state == JobState::Running {
+            if job.state() == &JobState::Running {
                 let cmd = job.commands.pop_front();
                 if job.commands.is_empty() {
-                    job.state = JobState::Completed;
+                    *job.state_mut() = JobState::Completed;
                 }
                 Ok(cmd)
             } else {

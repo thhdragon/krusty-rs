@@ -25,12 +25,28 @@ pub struct TrajectoryConfig {
 
 #[derive(Debug, Clone)]
 pub struct TrajectorySegment {
+    /// Target position at the end of the segment
     pub target: [f64; 4],
+    /// Start velocity for each axis (mm/s)
     pub start_velocity: [f64; 4],
+    /// End velocity for each axis (mm/s)
     pub end_velocity: [f64; 4],
+    /// Acceleration for each axis (mm/s^2)
     pub acceleration: [f64; 4],
+    /// Duration of the segment (seconds)
     pub duration: f64,
+    /// Type of motion (Print, Travel, Home, Extruder)
     pub motion_type: MotionType,
+    /// Requested feedrate (mm/s)
+    pub feedrate: f64,
+    /// Feedrate after acceleration/jerk limiting (mm/s)
+    pub limited_feedrate: f64,
+    /// Euclidean distance of the segment (mm)
+    pub distance: f64,
+    /// Entry speed at the start of the segment (mm/s)
+    pub entry_speed: f64,
+    /// Exit speed at the end of the segment (mm/s)
+    pub exit_speed: f64,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -66,41 +82,41 @@ impl TrajectoryGenerator {
         motion_type: MotionType,
     ) -> Result<(), TrajectoryError> {
         let distance = self.calculate_distance(&self.current_position, &target);
-        
         if distance < 0.001 {
             return Ok(());
         }
-        
         // Calculate unit vector
         let unit_vector = self.calculate_unit_vector(&self.current_position, &target);
-        
         // Calculate limited velocity based on acceleration limits
         let limited_velocity = self.limit_velocity_by_acceleration(&unit_vector, feedrate);
-        
         // Calculate acceleration for each axis
         let acceleration = self.calculate_axis_accelerations(&unit_vector);
-        
         // Calculate trapezoidal profile parameters
         let (accel_time, cruise_time, decel_time) = self.calculate_trapezoidal_times(
             distance,
             limited_velocity,
             &acceleration,
         );
-        
+        // Compute entry/exit speeds (for now, assume start at rest, end at rest)
+        // In a more advanced planner, these would be set by lookahead or previous segment
+        let entry_speed = self.motion_queue.back().map_or(0.0, |prev| prev.exit_speed);
+        let exit_speed = 0.0; // For now, always end at rest
         let segment = TrajectorySegment {
             target,
-            start_velocity: [0.0; 4],
-            end_velocity: [0.0; 4],
+            start_velocity: [entry_speed; 4], // Placeholder: per-axis in future
+            end_velocity: [exit_speed; 4],    // Placeholder: per-axis in future
             acceleration,
             duration: accel_time + cruise_time + decel_time,
             motion_type,
+            feedrate,
+            limited_feedrate: limited_velocity,
+            distance,
+            entry_speed,
+            exit_speed,
         };
-        
         self.motion_queue.push_back(segment);
         self.current_position = target;
-        
         tracing::debug!("Generated trapezoidal move: {:.3}mm @ {:.1}mm/s", distance, limited_velocity);
-        
         Ok(())
     }
 

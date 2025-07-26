@@ -5,6 +5,8 @@ pub mod gcode_utils;
 pub mod trajectory;
 pub mod s_curve;
 pub mod shaper;
+pub mod print_job;
+pub mod api_models;
 
 // --- Shared Traits and Types ---
 

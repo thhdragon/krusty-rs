@@ -12,6 +12,10 @@ use crate::hardware::board_config::BoardConfig;
 #[cfg(feature = "sim-in-host")]
 use krusty_shared::event_queue::SimEventQueue;
 
+pub use krusty_shared::trajectory::{
+    MotionType, TrajectoryConfig, TrajectoryError, TrajectoryGenerator, TrajectorySegment,
+};
+
 /// Statistics for the motion queue
 #[derive(Debug, Clone, Default)]
 pub struct QueueStats {
