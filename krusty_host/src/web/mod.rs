@@ -14,11 +14,11 @@ use tokio::sync::RwLock;
 
 // Placeholder for the shared state type; replace with actual type as needed
 pub struct WebInterface {
-    pub state: Arc<RwLock<crate::printer::PrinterState>>, // Adjust type if needed
+    pub state: Arc<RwLock<crate::host_os::PrinterState>>, // Adjusted type
 }
 
 impl WebInterface {
-    pub fn new(state: Arc<RwLock<crate::printer::PrinterState>>) -> Self {
+    pub fn new(state: Arc<RwLock<crate::host_os::PrinterState>>) -> Self {
         Self { state }
     }
 

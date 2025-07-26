@@ -9,15 +9,11 @@ use crate::system_info::SystemInfo;
 // Public API types (PrinterHostOS, SystemInfo, stubs) are re-exported via mod.rs and lib.rs
 // Only internal logic and trait implementations should remain here
 
-use crate::communication::serial_interface::SerialInterface;
 use crate::scheduler::clock_sync_stub::ClockSyncStub;
 use crate::communication::event_bus_stub::EventBusStub;
 // use serial2_tokio::SerialPort; // Only used in trait impl below (commented out)
-// ...existing code...
 
 // SystemInfo struct moved to src/system_info.rs
-
-// ...existing code...
 
 // ModuleManagerStub moved to src/module_manager.rs
 
@@ -32,7 +28,6 @@ use crate::communication::event_bus_stub::EventBusStub;
 
 use std::sync::Arc;
 use tokio::sync::{RwLock, broadcast};
-use crate::printer::Printer;
 use crate::config::{Config, ConfigManager};
 use crate::gcode::GCodeProcessor;
 use crate::motion::MotionController;
@@ -41,6 +36,163 @@ use crate::PlannerMotionConfig;
 use crate::hardware::HardwareManager;
 use crate::web::WebInterface;
 use crate::file_manager::FileManager;
+
+#[derive(Debug, thiserror::Error)]
+pub enum PrinterError {
+    #[error("Hardware error: {0}")]
+    Hardware(#[from] crate::hardware::HardwareError),
+    #[error("Motion error: {0}")]
+    Motion(#[from] crate::motion::MotionError),
+    #[error("GCode error: {0}")]
+    GCode(#[from] crate::gcode::parser::GCodeError),
+    #[error("Other: {0}")]
+    Other(String),
+}
+
+#[derive(Debug, Clone)]
+pub struct PrinterState {
+    pub ready: bool,
+    pub position: [f64; 3], // X, Y, Z
+    pub temperature: f64,
+    pub bed_temperature: f64,
+    pub print_progress: f64,
+    pub printing: bool,
+    pub paused: bool,
+}
+
+impl PrinterState {
+    pub fn new() -> Self {
+        Self {
+            ready: false,
+            position: [0.0, 0.0, 0.0],
+            temperature: 0.0,
+            bed_temperature: 0.0,
+            print_progress: 0.0,
+            printing: false,
+            paused: false,
+        }
+    }
+}
+
+impl Default for PrinterState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+pub struct Printer {
+    config: crate::config::Config,
+    state: std::sync::Arc<tokio::sync::RwLock<PrinterState>>,
+    gcode_processor: crate::gcode::GCodeProcessor,
+    motion_controller: std::sync::Arc<tokio::sync::RwLock<crate::motion::MotionController>>,
+    hardware_manager: crate::hardware::HardwareManager,
+    shutdown_tx: tokio::sync::broadcast::Sender<()>,
+}
+
+impl Printer {
+    pub async fn new(config: crate::config::Config) -> Result<Self, PrinterError> {
+        let state = std::sync::Arc::new(tokio::sync::RwLock::new(PrinterState::new()));
+        let (shutdown_tx, _) = tokio::sync::broadcast::channel(1);
+        let board = crate::hardware::board_config::BoardConfig::new(
+            config.printer.printer_name.as_deref().unwrap_or("DefaultBoard")
+        );
+        let hardware_manager = crate::hardware::HardwareManager::new(config.clone(), board);
+        let motion_controller = std::sync::Arc::new(tokio::sync::RwLock::new(crate::motion::MotionController::new(
+            state.clone(),
+            hardware_manager.clone(),
+            crate::motion::controller::MotionMode::Basic,
+            &config,
+        )));
+        let gcode_processor = crate::gcode::GCodeProcessor::new(state.clone(), motion_controller.clone());
+        if config.printer.printer_name.as_deref().unwrap_or("").is_empty() {
+            return Err(PrinterError::Other("Printer name cannot be empty".to_string()));
+        }
+        Ok(Self {
+            config,
+            state,
+            gcode_processor,
+            motion_controller,
+            hardware_manager,
+            shutdown_tx,
+        })
+    }
+    pub async fn start(&mut self) -> Result<(), PrinterError> {
+        tracing::info!("Starting printer OS");
+        self.hardware_manager.initialize().await?;
+        self.start_gcode_processing_loop().await?;
+        self.start_motion_control_loop().await?;
+        {
+            let mut state = self.state.write().await;
+            state.ready = true;
+        }
+        tracing::info!("Printer OS ready");
+        Ok(())
+    }
+    async fn start_motion_control_loop(&self) -> Result<(), PrinterError> {
+        let mut shutdown_rx = self.shutdown_tx.subscribe();
+        let motion_controller = self.motion_controller.clone();
+        tokio::task::spawn_local(async move {
+            let mut interval = tokio::time::interval(tokio::time::Duration::from_micros(1000));
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            loop {
+                tokio::select! {
+                    _ = shutdown_rx.recv() => {
+                        tracing::info!("Motion control loop shutting down");
+                        break;
+                    }
+                    _ = interval.tick() => {
+                        let mut mc = motion_controller.write().await;
+                        if let Err(e) = mc.update().await {
+                            tracing::error!("Motion controller update error: {}", e);
+                        }
+                    }
+                }
+            }
+        });
+        Ok(())
+    }
+    async fn start_gcode_processing_loop(&self) -> Result<(), PrinterError> {
+        let mut shutdown_rx = self.shutdown_tx.subscribe();
+        let gcode_processor = self.gcode_processor.clone();
+        tokio::task::spawn_local(async move {
+            let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(10));
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            loop {
+                tokio::select! {
+                    _ = shutdown_rx.recv() => {
+                        tracing::info!("G-code processing loop shutting down");
+                        break;
+                    }
+                    _ = interval.tick() => {
+                        if let Err(e) = gcode_processor.process_next_command().await {
+                            tracing::error!("G-code processing error: {}", e);
+                        }
+                    }
+                }
+            }
+        });
+        Ok(())
+    }
+    pub async fn shutdown(&mut self) -> Result<(), PrinterError> {
+        tracing::info!("Shutting down printer OS");
+        let _ = self.shutdown_tx.send(());
+        self.hardware_manager.shutdown().await?;
+        Ok(())
+    }
+    pub async fn process_gcode(&mut self, gcode: &str) -> Result<(), PrinterError> {
+        self.gcode_processor.process_command(gcode).await?;
+        Ok(())
+    }
+    pub fn get_config(&self) -> &crate::config::Config {
+        &self.config
+    }
+    pub async fn get_state(&self) -> PrinterState {
+        self.state.read().await.clone()
+    }
+    pub fn get_motion_controller(&self) -> std::sync::Arc<tokio::sync::RwLock<crate::motion::MotionController>> {
+        self.motion_controller.clone()
+    }
+}
 
 /// Complete 3D Printer Host OS
 pub struct PrinterHostOS {
@@ -66,7 +218,7 @@ pub struct PrinterHostOS {
     hardware_manager: HardwareManager,
 
     /// System state
-    state: Arc<RwLock<crate::printer::PrinterState>>,
+    state: Arc<RwLock<PrinterState>>,
 
     /// Shutdown signaling
     shutdown_tx: broadcast::Sender<()>,
@@ -101,7 +253,7 @@ impl PrinterHostOS {
     }
 
     /// Get the current printer state
-    pub async fn get_printer_state(&self) -> crate::printer::PrinterState {
+    pub async fn get_printer_state(&self) -> PrinterState {
         self.state.read().await.clone()
     }
 
@@ -160,7 +312,7 @@ impl PrinterHostOS {
         let config_manager = ConfigManager::new(config.clone(), config_path);
 
         // Initialize core components
-        let state = Arc::new(RwLock::new(crate::printer::PrinterState::default()));
+        let state = Arc::new(RwLock::new(PrinterState::default()));
         let (shutdown_tx, _) = broadcast::channel(1);
 
         let board = crate::hardware::board_config::BoardConfig::new(&config.printer.printer_name.clone().unwrap_or("DefaultBoard".to_string()));
@@ -520,7 +672,7 @@ impl PrinterHostOS {
     }
 
     /// Get current system status
-    pub async fn get_status(&self) -> crate::printer::PrinterState {
+    pub async fn get_status(&self) -> PrinterState {
         self.state.read().await.clone()
     }
 
@@ -614,5 +766,3 @@ impl PrinterHostOS {
         self.state.read().await.print_progress // Uptime tracking removed (ensure PrinterState docs clarify)
     }
 }
-
-// ...existing code...

@@ -3,9 +3,8 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 
 use tokio::sync::RwLock;
-
 use crate::motion::MotionController;
-use crate::printer::PrinterState;
+use crate::host_os::PrinterState;
 use crate::gcode::macros::MacroProcessor;
 use crate::gcode::parser::{OwnedGCodeCommand, GCodeError};
 

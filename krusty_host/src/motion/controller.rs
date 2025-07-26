@@ -1,7 +1,7 @@
 // src/motion/controller.rs - Motion controller that uses your advanced planners
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use crate::printer::PrinterState;
+use crate::host_os::PrinterState;
 use crate::hardware::HardwareManager;
 use crate::motion::planner::MotionPlanner;
 use crate::motion::planner::adaptive::{PerformanceMonitor, VibrationAnalyzer, PerformanceMetrics, AdaptiveOptimizer, AdaptiveConfig};
