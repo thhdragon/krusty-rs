@@ -173,7 +173,7 @@ impl MotionPlanner {
             return Ok(());
         }
         let limited_feedrate = self.limit_feedrate_by_acceleration(&target, feedrate);
-        let mut segment = MotionSegment {
+        let segment = MotionSegment {
             target,
             feedrate,
             limited_feedrate,
