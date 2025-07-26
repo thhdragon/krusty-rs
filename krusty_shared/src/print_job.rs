@@ -1,5 +1,4 @@
 use thiserror::Error;
-use std::collections::VecDeque;
 
 #[derive(Debug, Error)]
 pub enum PrintJobError {

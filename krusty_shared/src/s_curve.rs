@@ -49,9 +49,9 @@ impl SCurveGenerator {
         let total_accel_decel_distance = 2.0 * accel_distance;
         let cruise_distance = distance - total_accel_decel_distance;
         let mut trajectory = Vec::new();
-        let mut time = 0.0;
-        let mut position = 0.0;
-        let mut velocity = start_velocity;
+        let time = 0.0;
+        let position = 0.0;
+        let velocity = start_velocity;
         // Phase 1: Jerk increase (positive)
         for t in (0..100).map(|i| i as f64 * jerk_time / 100.0) {
             let point = self.calculate_jerk_phase(t, jerk_time, start_velocity, 1.0);
