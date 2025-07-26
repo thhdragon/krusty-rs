@@ -3,6 +3,8 @@
 pub mod event_queue;
 pub mod gcode_utils;
 pub mod trajectory;
+pub mod s_curve;
+pub mod shaper;
 
 // --- Shared Traits and Types ---
 

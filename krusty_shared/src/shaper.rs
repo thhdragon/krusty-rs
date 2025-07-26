@@ -1,8 +1,6 @@
-// src/motion/shaper.rs
-/// Input shapers for reducing vibrations and ringing
-/// 
-/// These filters reduce the oscillations that occur when the printer
-/// changes direction rapidly, improving print quality
+// src/shaper.rs
+// Shared input shaper logic for vibration reduction
+// Migrated from krusty_host/src/motion/shaper.rs
 
 /// Trait for modular input shapers
 pub trait InputShaperTrait {
@@ -109,11 +107,3 @@ impl PerAxisInputShapers {
         }
     }
 }
-
-// Example usage in planner (stub):
-// let mut shapers = PerAxisInputShapers::new(4); // X, Y, Z, E
-// shapers.set_shaper(0, InputShaperType::ZVD(ZVDShaper::new(...)));
-// let shaped_x = shapers.do_step(0, raw_x);
-
-// TODO: Add more shaper types and integrate trait-based shapers into the motion pipeline
-// TODO: Integrate InputShaper into motion planning pipeline when implemented.

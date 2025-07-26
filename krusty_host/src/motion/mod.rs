@@ -6,7 +6,6 @@ mod junction;
 mod kinematics;
 pub mod planner;
 pub mod controller;
-pub mod shaper;
 pub mod stepper;
 
 use crate::hardware::board_config::BoardConfig;

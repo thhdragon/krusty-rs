@@ -17,7 +17,7 @@ This document outlines the plan to migrate reusable logic from `krusty_host` to 
 
 - [x] **Motion Planning Logic**
     - [x] Move `motion/trajectory.rs` to `krusty_shared` (complete)
-    - [ ] Move `motion/s_curve.rs` to `krusty_shared`
+    - [x] Move `motion/s_curve.rs` to `krusty_shared` (complete, file deleted from host)
     - [ ] Move `motion/planner/snap_crackle.rs` to `krusty_shared`
     - [x] Update imports in both `krusty_host` and `krusty_simulator` (for trajectory)
     - [x] Ensure all dependencies (types, traits) are also available in `krusty_shared` (for trajectory)
@@ -51,7 +51,7 @@ This document outlines the plan to migrate reusable logic from `krusty_host` to 
 For each file/module to be moved, explicitly list dependencies (types, traits, modules) that must also be available in `krusty_shared`. Update this section as you discover new dependencies during migration.
 
 - **motion/trajectory.rs**: Depends on std::collections::VecDeque, thiserror::Error, tracing (all present in krusty_shared; duplicate MotionType and related types removed from host)
-- **motion/s_curve.rs**: Depends on [list types/traits after initial move]
+- **motion/s_curve.rs**: Depends on thiserror::Error, krusty_shared::event_queue::{SimEventQueue, SimClock, SimEvent, SimEventType}, krusty_shared::StepCommand, std::sync::{Arc, Mutex}, std::time::Duration (all present in krusty_shared)
 - **motion/planner/snap_crackle.rs**: Depends on [list types/traits after initial move]
 - **motion/shaper.rs**: Depends on [list types/traits after initial move]
 - **print_job.rs** (JobState, PrintJobError): Depends on [list types/traits after initial move]

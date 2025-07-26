@@ -31,7 +31,7 @@ use crate::motion::kinematics::{Kinematics, create_kinematics};
 use crate::motion::junction::JunctionDeviation;
 use crate::motion::kinematics::KinematicsType;
 use thiserror::Error;
-use crate::motion::shaper::{InputShaperTrait, PerAxisInputShapers, InputShaperType};
+use krusty_shared::shaper::{InputShaperTrait, PerAxisInputShapers, InputShaperType, ZVDShaper, SineWaveShaper};
 
 #[derive(Debug, Error)]
 pub enum MotionError {
@@ -145,7 +145,6 @@ impl MotionPlanner {
     pub fn new_from_config(config: &Config) -> Self {
         let planner_config = MotionConfig::new_from_config(config);
         // --- Input shaper integration ---
-        use crate::motion::shaper::{InputShaperType, ZVDShaper, SineWaveShaper, PerAxisInputShapers};
         let mut input_shapers = PerAxisInputShapers::new(4); // X, Y, Z, E
         if let Some(motion_cfg) = &config.motion {
             for (axis_name, shaper_cfg) in &motion_cfg.shaper {
@@ -595,7 +594,7 @@ pub mod adaptive;
 /// Configuration for advanced motion features (input shapers, blending)
 #[derive(Debug, Clone)]
 pub struct AdvancedMotionConfig {
-    pub input_shapers: Option<Vec<Option<crate::motion::shaper::InputShaperType>>>, // Per-axis
+    pub input_shapers: Option<Vec<Option<InputShaperType>>>, // Per-axis
     pub bezier_blending: Option<BezierBlendingConfig>,
 }
 
