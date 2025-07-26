@@ -5,3 +5,6 @@
 	path = sim_reference/prunt
 	url = https://github.com/thhdragon/prunt.git
 
+[submodule "sim_reference/virtual-klipper-printer"]
+	path = sim_reference/virtual-klipper-printer
+	url = https://github.com/thhdragon/virtual-klipper-printer.git
