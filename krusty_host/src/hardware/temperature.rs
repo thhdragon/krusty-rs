@@ -1,8 +1,4 @@
 // src/temperature/control.rs
-use std::collections::VecDeque;
-use std::time::Instant;
-use super::hardware_traits::TemperatureControllerTrait;
-use krusty_shared::{HeaterState, ThermistorState, ThermalEvent, TemperatureController};
 
 // --- Heater/Thermistor Simulation Types ---
 // Removed duplicate definitions of HeaterState, ThermistorState, ThermalEvent, and TemperatureController.

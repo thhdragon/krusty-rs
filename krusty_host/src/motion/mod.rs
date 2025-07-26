@@ -10,7 +10,6 @@ pub mod stepper;
 
 pub use planner::MotionError;
 
-use std::sync::{Arc, Mutex};
 use crate::hardware::board_config::BoardConfig;
 #[cfg(feature = "sim-in-host")]
 use krusty_simulator::simulator::event_queue::SimEventQueue;

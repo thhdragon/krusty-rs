@@ -19,7 +19,6 @@ use hardware::HardwareManager;
 use motion::MotionSystem;
 #[cfg(feature = "sim-in-host")]
 use krusty_simulator::simulator::Simulator;
-use std::sync::{Arc, Mutex};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
