@@ -1,10 +1,3 @@
-#[derive(Debug, Clone, PartialEq)]
-pub enum MotionQueueState {
-    Idle,
-    Running,
-    Paused,
-    Cancelled,
-}
 // # Motion Planner: Config-Driven Shaper and Blending Assignment
 //
 // This module integrates advanced motion planning with per-axis input shaper and blending configuration.
@@ -29,78 +22,21 @@ use std::collections::VecDeque;
 use crate::config::Config;
 use crate::motion::kinematics::{Kinematics, create_kinematics};
 use crate::motion::junction::JunctionDeviation;
-use crate::motion::kinematics::KinematicsType;
-use thiserror::Error;
-use krusty_shared::shaper::{InputShaperTrait, PerAxisInputShapers, InputShaperType, ZVDShaper, SineWaveShaper};
+use krusty_shared::shaper::{PerAxisInputShapers, InputShaperType, ZVDShaper, SineWaveShaper};
+use krusty_shared::trajectory::{MotionQueueState, MotionError, MotionConfig, MotionType};
+use krusty_shared::MotionConfigExt;
 
-#[derive(Debug, Error)]
-pub enum MotionError {
-    #[error("Junction deviation error: {0}")]
-    JunctionDeviation(String),
-    #[error("Kinematics error: {0}")]
-    Kinematics(String),
-    #[error("Other: {0}")]
-    Other(String),
+pub struct MotionPlanner {
+    config: MotionConfig, // Store the config!
+    current_position: [f64; 4],
+    motion_queue: VecDeque<MotionSegment>,
+    planner_state: PlannerState,
+    kinematics: Box<dyn Kinematics + Send + Sync>,
+    junction_deviation: JunctionDeviation,
+    pub input_shapers: PerAxisInputShapers, // Per-axis shapers (enum-based)
+    state: MotionQueueState,
 }
 
-// Re-export shared types if they were defined here or move them here.
-// Use shared MotionType from krusty_shared
-use krusty_shared::trajectory::MotionType;
-
-#[derive(Debug, Clone)]
-pub struct MotionConfig {
-    pub max_velocity: [f64; 4],
-    pub max_acceleration: [f64; 4],
-    pub max_jerk: [f64; 4],
-    pub junction_deviation: f64,
-    pub axis_limits: [[f64; 2]; 3],
-    pub kinematics_type: KinematicsType,
-    pub minimum_step_distance: f64,
-    pub lookahead_buffer_size: usize,
-}
-
-fn parse_kinematics_type(s: &str) -> KinematicsType {
-    match s.to_lowercase().as_str() {
-        "cartesian" => KinematicsType::Cartesian,
-        "corexy" => KinematicsType::CoreXY,
-        "delta" => KinematicsType::Delta,
-        "hangprinter" => KinematicsType::Hangprinter,
-        _ => KinematicsType::Cartesian,
-    }
-}
-
-impl MotionConfig {
-    pub fn new_from_config(config: &Config) -> Self {
-        // Simplified implementation based on your config structure
-        Self {
-            max_velocity: [config.printer.max_velocity, config.printer.max_velocity, config.printer.max_z_velocity, 50.0], // Example E max vel
-            max_acceleration: [config.printer.max_accel, config.printer.max_accel, config.printer.max_z_accel, 1000.0], // Example E max accel
-            max_jerk: [20.0, 20.0, 0.5, 2.0], // Example jerk values
-            junction_deviation: 0.05, // mm
-            axis_limits: [[0.0, 200.0], [0.0, 200.0], [0.0, 200.0]], // Example limits, should come from config ideally
-            kinematics_type: parse_kinematics_type(&config.printer.kinematics),
-            minimum_step_distance: 0.001, // mm
-            lookahead_buffer_size: 16,
-        }
-    }
-}
-
-impl Default for MotionConfig {
-    fn default() -> Self {
-        Self {
-            max_velocity: [100.0, 100.0, 10.0, 50.0],
-            max_acceleration: [1000.0, 1000.0, 100.0, 1000.0],
-            max_jerk: [20.0, 20.0, 0.5, 2.0],
-            junction_deviation: 0.05,
-            axis_limits: [[0.0, 200.0], [0.0, 200.0], [0.0, 200.0]],
-            kinematics_type: KinematicsType::Cartesian,
-            minimum_step_distance: 0.001,
-            lookahead_buffer_size: 16,
-        }
-    }
-}
-
-// Rename MotionBlock to MotionSegment for consistency or keep MotionBlock
 #[derive(Debug, Clone)]
 pub struct MotionSegment { // Was MotionBlock
     pub target: [f64; 4],
@@ -123,19 +59,8 @@ struct PlannerState {
     last_update: std::time::Instant,
 }
 
-pub struct MotionPlanner {
-    config: MotionConfig, // Store the config!
-    current_position: [f64; 4],
-    motion_queue: VecDeque<MotionSegment>,
-    planner_state: PlannerState,
-    kinematics: Box<dyn Kinematics + Send + Sync>,
-    junction_deviation: JunctionDeviation,
-    pub input_shapers: PerAxisInputShapers, // Per-axis shapers (enum-based)
-    state: MotionQueueState,
-}
-
 impl MotionPlanner {
-    pub fn new(config: MotionConfig) -> Self {
+    pub fn new(_config: MotionConfig) -> Self {
         // Prefer config-driven construction; use new_from_config for all planner creation
         // This function is retained for compatibility but delegates to new_from_config
         // You must pass a Config (not just MotionConfig) to use config-driven shaper/blending

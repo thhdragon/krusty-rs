@@ -1,36 +1,5 @@
 //! Board abstraction and pin mapping for Krusty Simulator
 
-/// Represents a physical or virtual board configuration
-#[derive(Debug, Clone)]
-pub struct BoardConfig {
-    /// Board name/model
-    pub name: String,
-    /// Pin mapping for steppers, heaters, fans, sensors, etc.
-    pub pins: std::collections::HashMap<String, u32>,
-    /// Timing constraints (e.g., max step rate)
-    pub timing: BoardTiming,
-    /// Other board-specific features
-    pub features: std::collections::HashSet<String>,
-}
-
-#[derive(Debug, Clone)]
-pub struct BoardTiming {
-    pub max_step_rate: u32,
-    pub min_pulse_width_ns: u32,
-    pub comm_baud: u32,
-}
-
-impl BoardConfig {
-    pub fn new(name: &str) -> Self {
-        Self {
-            name: name.to_string(),
-            pins: std::collections::HashMap::new(),
-            timing: BoardTiming {
-                max_step_rate: 100_000,
-                min_pulse_width_ns: 500,
-                comm_baud: 250_000,
-            },
-            features: std::collections::HashSet::new(),
-        }
-    }
-}
+// Moved to krusty_shared::board_config
+// pub struct BoardConfig { ... }
+// pub struct BoardTiming { ... }

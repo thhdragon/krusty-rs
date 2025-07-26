@@ -1,12 +1,5 @@
 // src/motion/kinematics.rs
-/// Different types of printer kinematics
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum KinematicsType {
-    Cartesian,
-    CoreXY,
-    Delta,
-    Hangprinter,
-}
+use krusty_shared::KinematicsType;
 
 /// Kinematics handler for different printer types
 pub trait Kinematics: KinematicsClone + Send + Sync {

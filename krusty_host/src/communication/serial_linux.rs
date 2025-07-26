@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use crate::communication::serial_interface::SerialInterface;
+use krusty_shared::serial_interface::SerialInterface;
 
 /// Linux implementation of SerialInterface using serial2-tokio
 pub struct LinuxSerial;

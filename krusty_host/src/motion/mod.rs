@@ -1,5 +1,5 @@
 pub use controller::MotionController;
-pub use planner::MotionError; // Restore pub use planner::MotionError for use in host_os.rs and elsewhere
+pub use krusty_shared::trajectory::MotionError; // Use shared MotionError for use in host_os.rs and elsewhere
 // src/motion/mod.rs - Activate advanced features
 
 mod junction;
@@ -8,7 +8,7 @@ pub mod planner;
 pub mod controller;
 pub mod stepper;
 
-use crate::hardware::board_config::BoardConfig;
+use krusty_shared::board_config::BoardConfig;
 #[cfg(feature = "sim-in-host")]
 use krusty_shared::event_queue::SimEventQueue;
 

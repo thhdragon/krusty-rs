@@ -1,7 +1,7 @@
 use std::env;
 use tokio::sync::mpsc;
 use tokio::task::LocalSet;
-use hardware::board_config::BoardConfig;
+use krusty_shared::board_config::BoardConfig;
 #[cfg(feature = "sim-in-host")]
 use krusty_shared::event_queue::{SimEventQueue, SimClock};
 use hardware::HardwareManager;

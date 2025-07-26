@@ -1,5 +1,5 @@
-use crate::hardware::board_config::BoardConfig;
-use crate::hardware::hardware_traits::PeripheralTrait;
+use krusty_shared::hardware_traits::PeripheralTrait;
+use krusty_shared::board_config::BoardConfig;
 impl PeripheralTrait for FanController {
     fn perform_action(&mut self, action: &str) -> Result<(), Box<dyn std::error::Error + Send>> {
         match action {
@@ -25,7 +25,7 @@ impl PeripheralTrait for GenericSensor {
 // src/hardware/mod.rs
 // Declare the submodules within the `hardware` module
 pub mod temperature; // This refers to src/hardware/temperature.rs
-pub mod hardware_traits; // Expose trait definitions for hardware modules
+// pub mod hardware_traits; // Now provided by krusty_shared
 pub mod board_config; // Expose board configuration for hardware modules
 
 // Re-export items you want easily accessible from the `hardware` module level

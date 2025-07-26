@@ -1,10 +1,1 @@
-/// Print time/MCU clock sync stub
-#[derive(Debug, Clone)]
-pub struct ClockSyncStub;
-
-impl ClockSyncStub {
-    pub fn new() -> Self {
-        // STUB: Implement clock sync logic
-        Self
-    }
-}
+// File removed: all logic should use krusty_shared::event_queue::SimClock or a real clock abstraction.

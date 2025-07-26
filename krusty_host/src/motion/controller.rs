@@ -5,7 +5,9 @@ use crate::host_os::PrinterState;
 use crate::hardware::HardwareManager;
 use crate::motion::planner::MotionPlanner;
 use crate::motion::planner::adaptive::{PerformanceMonitor, VibrationAnalyzer, PerformanceMetrics, AdaptiveOptimizer, AdaptiveConfig};
+use krusty_shared::trajectory::{MotionError, MotionQueueState};
 use krusty_shared::trajectory::MotionType;
+use krusty_shared::MotionConfigExt;
 
 #[derive(Debug, Clone)]
 // MotionController struct definition follows
@@ -37,19 +39,19 @@ impl MotionController {
     pub fn get_current_position(&self) -> [f64; 4] {
         self.current_position
     }
-    pub fn pause_queue(&mut self) -> Result<(), crate::motion::planner::MotionError> {
+    pub fn pause_queue(&mut self) -> Result<(), MotionError> {
         self.planner.pause()
     }
 
-    pub fn resume_queue(&mut self) -> Result<(), crate::motion::planner::MotionError> {
+    pub fn resume_queue(&mut self) -> Result<(), MotionError> {
         self.planner.resume()
     }
 
-    pub fn cancel_queue(&mut self) -> Result<(), crate::motion::planner::MotionError> {
+    pub fn cancel_queue(&mut self) -> Result<(), MotionError> {
         self.planner.cancel()
     }
 
-    pub fn get_queue_state(&self) -> crate::motion::planner::MotionQueueState {
+    pub fn get_queue_state(&self) -> MotionQueueState {
         self.planner.get_state()
     }
     pub fn new(

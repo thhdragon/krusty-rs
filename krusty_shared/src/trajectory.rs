@@ -57,6 +57,51 @@ pub enum MotionType {
     Extruder,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum MotionQueueState {
+    Idle,
+    Running,
+    Paused,
+    Cancelled,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum MotionError {
+    #[error("Junction deviation error: {0}")]
+    JunctionDeviation(String),
+    #[error("Kinematics error: {0}")]
+    Kinematics(String),
+    #[error("Other: {0}")]
+    Other(String),
+}
+
+#[derive(Debug, Clone)]
+pub struct MotionConfig {
+    pub max_velocity: [f64; 4],
+    pub max_acceleration: [f64; 4],
+    pub max_jerk: [f64; 4],
+    pub junction_deviation: f64,
+    pub axis_limits: [[f64; 2]; 3],
+    pub kinematics_type: crate::KinematicsType,
+    pub minimum_step_distance: f64,
+    pub lookahead_buffer_size: usize,
+}
+
+impl Default for MotionConfig {
+    fn default() -> Self {
+        Self {
+            max_velocity: [100.0, 100.0, 10.0, 50.0],
+            max_acceleration: [1000.0, 1000.0, 100.0, 1000.0],
+            max_jerk: [20.0, 20.0, 0.5, 2.0],
+            junction_deviation: 0.05,
+            axis_limits: [[0.0, 200.0], [0.0, 200.0], [0.0, 200.0]],
+            kinematics_type: crate::KinematicsType::Cartesian,
+            minimum_step_distance: 0.001,
+            lookahead_buffer_size: 16,
+        }
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum TrajectoryError {
     #[error("Invalid trajectory parameters: {0}")]

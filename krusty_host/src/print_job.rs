@@ -1,7 +1,7 @@
 use futures_core::stream::Stream;
 use futures_util::StreamExt;
 use krusty_shared::print_job::{JobState, PrintJobError, PrintJob as SharedPrintJob};
-use crate::gcode::parser::{GCodeCommand, GCodeError, OwnedGCodeCommand, OwnedGCodeError};
+use krusty_shared::gcode::{GCodeCommand, GCodeError, OwnedGCodeCommand, OwnedGCodeError};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use std::collections::VecDeque;

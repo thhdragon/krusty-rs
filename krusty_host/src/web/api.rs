@@ -6,7 +6,7 @@ pub fn app_with_state(state: AppState) -> axum::Router {
 
 use crate::web::models::{GcodeCommandRequest, AuthRequest, AuthResponse, TokenCheckResponse};
 use crate::web::printer_channel::PrinterRequest;
-use crate::web::auth::{AuthBackend, InMemoryAuthBackend};
+use krusty_shared::{AuthBackend, InMemoryAuthBackend};
 use crate::web::token_blacklist::TokenBlacklist;
 use axum::{
     extract::State,

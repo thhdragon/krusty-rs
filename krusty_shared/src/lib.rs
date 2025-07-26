@@ -1,12 +1,20 @@
 // krusty_shared: shared traits and types for host, simulator, and MCU
 
 pub mod event_queue;
+pub mod gcode;
 pub mod gcode_utils;
 pub mod trajectory;
 pub mod s_curve;
 pub mod shaper;
 pub mod print_job;
 pub mod api_models;
+pub mod board_config;
+pub mod hardware_traits;
+pub mod auth_backend;
+pub mod serial_interface;
+pub mod event_interface;
+pub mod config;
+pub use auth_backend::InMemoryAuthBackend;
 
 // --- Shared Traits and Types ---
 
@@ -311,4 +319,32 @@ pub struct HardwareState {
     pub thermistor_state: ThermistorState,
     pub fan_state: FanState, // Simulated fan state
     pub switch_state: SwitchState, // Simulated switch state
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum KinematicsType {
+    Cartesian,
+    CoreXY,
+    Delta,
+    Hangprinter,
+}
+
+// Utility trait for constructing MotionConfig from a config struct
+pub trait MotionConfigExt {
+    fn new_from_config(config: &crate::config::Config) -> Self;
+}
+
+impl MotionConfigExt for crate::trajectory::MotionConfig {
+    fn new_from_config(config: &crate::config::Config) -> Self {
+        Self {
+            max_velocity: [config.printer.max_velocity, config.printer.max_velocity, config.printer.max_z_velocity, 50.0],
+            max_acceleration: [config.printer.max_accel, config.printer.max_accel, config.printer.max_z_accel, 1000.0],
+            max_jerk: [20.0, 20.0, 0.5, 2.0],
+            junction_deviation: 0.05,
+            axis_limits: [[0.0, 200.0], [0.0, 200.0], [0.0, 200.0]],
+            kinematics_type: crate::trajectory::MotionConfig::default().kinematics_type,
+            minimum_step_distance: 0.001,
+            lookahead_buffer_size: 16,
+        }
+    }
 }

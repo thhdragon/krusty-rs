@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use tokio::sync::mpsc::{Sender, Receiver, channel};
 use tokio::time::{sleep, Duration};
 use tokio::sync::Mutex;
-use crate::communication::event_interface::EventInterface;
+use krusty_shared::event_interface::EventInterface;
 
 /// Event bus stub
 pub struct EventBusStub;

@@ -9,7 +9,6 @@ use crate::system_info::SystemInfo;
 // Public API types (PrinterHostOS, SystemInfo, stubs) are re-exported via mod.rs and lib.rs
 // Only internal logic and trait implementations should remain here
 
-use crate::scheduler::clock_sync_stub::ClockSyncStub;
 use crate::communication::event_bus_stub::EventBusStub;
 // use serial2_tokio::SerialPort; // Only used in trait impl below (commented out)
 
@@ -32,10 +31,12 @@ use crate::config::{Config, ConfigManager};
 use crate::gcode::GCodeProcessor;
 use crate::motion::MotionController;
 use crate::motion::controller::MotionMode;
-use crate::PlannerMotionConfig;
 use crate::hardware::HardwareManager;
 use crate::web::WebInterface;
 use crate::file_manager::FileManager;
+use krusty_shared::board_config::BoardConfig;
+use krusty_shared::trajectory::MotionConfig;
+use krusty_shared::MotionConfigExt;
 
 #[derive(Debug, thiserror::Error)]
 pub enum PrinterError {
@@ -44,7 +45,7 @@ pub enum PrinterError {
     #[error("Motion error: {0}")]
     Motion(#[from] crate::motion::MotionError),
     #[error("GCode error: {0}")]
-    GCode(#[from] crate::gcode::parser::GCodeError),
+    GCode(#[from] krusty_shared::gcode::GCodeError),
     #[error("Other: {0}")]
     Other(String),
 }
@@ -93,7 +94,7 @@ impl Printer {
     pub async fn new(config: crate::config::Config) -> Result<Self, PrinterError> {
         let state = std::sync::Arc::new(tokio::sync::RwLock::new(PrinterState::new()));
         let (shutdown_tx, _) = tokio::sync::broadcast::channel(1);
-        let board = crate::hardware::board_config::BoardConfig::new(
+        let board = BoardConfig::new(
             config.printer.printer_name.as_deref().unwrap_or("DefaultBoard")
         );
         let hardware_manager = crate::hardware::HardwareManager::new(config.clone(), board);
@@ -224,8 +225,6 @@ pub struct PrinterHostOS {
     shutdown_tx: broadcast::Sender<()>,
     /// Serial protocol stub (for parity with Klipper)
     serial_protocol: SerialProtocolStub,
-    /// Print time/MCU clock sync stub
-    clock_sync: ClockSyncStub,
     /// Dynamic module manager stub
     module_manager: ModuleManagerStub,
     /// Multi-MCU manager stub
@@ -287,11 +286,6 @@ impl PrinterHostOS {
         &self.serial_protocol
     }
 
-    /// Get the clock sync stub
-    pub fn get_clock_sync(&self) -> &ClockSyncStub {
-        &self.clock_sync
-    }
-
     /// Get the module manager stub
     pub fn get_module_manager(&self) -> &ModuleManagerStub {
         &self.module_manager
@@ -315,9 +309,9 @@ impl PrinterHostOS {
         let state = Arc::new(RwLock::new(PrinterState::default()));
         let (shutdown_tx, _) = broadcast::channel(1);
 
-        let board = crate::hardware::board_config::BoardConfig::new(&config.printer.printer_name.clone().unwrap_or("DefaultBoard".to_string()));
+        let board = BoardConfig::new(&config.printer.printer_name.clone().unwrap_or("DefaultBoard".to_string()));
         let hardware_manager = HardwareManager::new(config.clone(), board);
-        let _motion_config = PlannerMotionConfig::new_from_config(&config); // Unused, for future planner config
+        let _motion_config = MotionConfig::new_from_config(&config); // Unused, for future planner config
         let motion_controller = Arc::new(RwLock::new(MotionController::new(
             state.clone(),
             hardware_manager.clone(),
@@ -338,7 +332,6 @@ impl PrinterHostOS {
         // Setup serial port (example: "/dev/ttyUSB0", 250000 baud)
         let serial_port = Arc::new(serial2_tokio::SerialPort::open("/dev/ttyUSB0", 250000)?);
         let serial_protocol = SerialProtocolStub::new(serial_port, 4); // window_size=4
-        let clock_sync = ClockSyncStub::new();
         let module_manager = ModuleManagerStub::new();
         let multi_mcu_manager = MultiMCUManagerStub::new();
         let event_bus = EventBusStub::new();
@@ -354,7 +347,6 @@ impl PrinterHostOS {
             state,
             shutdown_tx,
             serial_protocol,
-            clock_sync,
             module_manager,
             multi_mcu_manager,
             event_bus,

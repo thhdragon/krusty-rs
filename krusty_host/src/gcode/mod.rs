@@ -5,8 +5,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use crate::motion::MotionController;
 use crate::host_os::PrinterState;
-use crate::gcode::macros::MacroProcessor;
-use crate::gcode::parser::{OwnedGCodeCommand, GCodeError};
+use krusty_shared::gcode::{MacroProcessor, GCodeError, OwnedGCodeCommand};
 
 
 #[derive(Debug, Clone)] // This should work now
@@ -45,7 +44,6 @@ impl GCodeProcessor {
         let mut queue = self.queue.lock().await;
         if let Some(_command) = queue.pop_front() {
             // ...existing code for processing command...
-            // (see above for full block)
             // For now, just call process_command
             // Note: self is &self, but process_command needs &mut self, so this may need refactoring
             // For now, return Ok(())
@@ -57,7 +55,7 @@ impl GCodeProcessor {
 
     async fn handle_home(&mut self, _parts: &[&str]) -> Result<(), GCodeError> {
         let mut mc = self.motion_controller.write().await;
-        use crate::gcode::parser::GCodeSpan;
+        use krusty_shared::gcode::GCodeSpan;
         mc.queue_home().await.map_err(|e| GCodeError { message: e.to_string(), span: GCodeSpan { range: 0..0 } })?;
         Ok(())
     }
@@ -232,17 +230,18 @@ impl GCodeProcessor {
                             }
                         }
                     }
-                    match parts[0].to_uppercase().as_str() {
-                        "G0" | "G1" => self.handle_linear_move(&parts.iter().map(|s| s.as_str()).collect::<Vec<_>>()).await?,
-                        "G28" => self.handle_home(&parts.iter().map(|s| s.as_str()).collect::<Vec<_>>()).await?,
-                        "G92" => self.handle_set_position(&parts.iter().map(|s| s.as_str()).collect::<Vec<_>>()).await?,
-                        "M104" => self.handle_set_hotend_temp(&parts.iter().map(|s| s.as_str()).collect::<Vec<_>>()).await?,
-                        "M109" => self.handle_set_hotend_temp_wait(&parts.iter().map(|s| s.as_str()).collect::<Vec<_>>()).await?,
-                        "M140" => self.handle_set_bed_temp(&parts.iter().map(|s| s.as_str()).collect::<Vec<_>>()).await?,
-                        "M190" => self.handle_set_bed_temp_wait(&parts.iter().map(|s| s.as_str()).collect::<Vec<_>>()).await?,
+                    let parts_ref: Vec<&str> = parts.iter().map(|s| s.as_str()).collect();
+                    match parts_ref[0].to_uppercase().as_str() {
+                        "G0" | "G1" => self.handle_linear_move(&parts_ref).await?,
+                        "G28" => self.handle_home(&parts_ref).await?,
+                        "G92" => self.handle_set_position(&parts_ref).await?,
+                        "M104" => self.handle_set_hotend_temp(&parts_ref).await?,
+                        "M109" => self.handle_set_hotend_temp_wait(&parts_ref).await?,
+                        "M140" => self.handle_set_bed_temp(&parts_ref).await?,
+                        "M190" => self.handle_set_bed_temp_wait(&parts_ref).await?,
                         "M82" => tracing::info!("Extruder set to absolute mode"),
                         "M84" => tracing::info!("Motors disabled"),
-                        "M106" => self.handle_fan_on(&parts.iter().map(|s| s.as_str()).collect::<Vec<_>>()).await?,
+                        "M106" => self.handle_fan_on(&parts_ref).await?,
                         "M107" => tracing::info!("Fan turned off"),
                         _ => tracing::warn!("Unhandled G-code: {}", command),
                     }
@@ -282,7 +281,3 @@ impl GCodeProcessor {
         self.state.read().await.clone()
     }
 }
-
-pub mod parser;
-pub mod macros;
-pub mod gcode_executor;
