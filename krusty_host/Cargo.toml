@@ -1,0 +1,32 @@
+[package]
+name = "krusty_host"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+krusty_simulator = { path = "../krusty_simulator", optional = true }
+krusty_mcu = { path = "../krusty_mcu" }
+krusty_shared = { path = "../krusty_shared" }
+
+# External dependencies
+# NOTE: serial2_tokio does not exist; review and replace with a suitable crate if needed
+
+tokio = { version = "1.46.1", features = ["full"] }
+axum = "0.8.4"
+serde = { version = "1.0.219", features = ["derive"] }
+thiserror = "2.0.12"
+futures-util = { version = "0.3.31", features = ["io"] }
+futures-core = "0.3.31"
+async-trait = "0.1.88"
+tracing = "0.1.41"
+tracing-subscriber = "0.3.19"
+toml = "0.9.2"
+jsonwebtoken = "9.3.1"
+axum-extra = { version = "0.10.1", features = ["typed-header"] }
+serde_json = "1.0.141"
+chrono = "0.4.41"
+serial2-tokio = "0.1.15"
+async-stream = "0.3.6"
+
+[features]
+sim-in-host = ["krusty_simulator"]

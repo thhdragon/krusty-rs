@@ -6,7 +6,6 @@ mod hardware;
 mod config;
 mod file_manager;
 mod web;
-mod simulator;
 
 use printer::Printer;
 use std::env;
@@ -14,10 +13,12 @@ use web::printer_channel::{PrinterRequest};
 use tokio::sync::mpsc;
 use tokio::task::LocalSet;
 use hardware::board_config::BoardConfig;
-use simulator::event_queue::{SimEventQueue, SimClock};
+#[cfg(feature = "sim-in-host")]
+use krusty_simulator::simulator::event_queue::{SimEventQueue, SimClock};
 use hardware::HardwareManager;
 use motion::MotionSystem;
-use simulator::Simulator;
+#[cfg(feature = "sim-in-host")]
+use krusty_simulator::simulator::Simulator;
 use std::sync::{Arc, Mutex};
 
 #[tokio::main]
@@ -60,11 +61,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
     let board_name = config.printer.printer_name.clone().unwrap_or("DefaultBoard".to_string());
     let board = BoardConfig::new(&board_name);
     // Create event queue and simulation clock
+    #[cfg(feature = "sim-in-host")]
     let event_queue = Arc::new(Mutex::new(SimEventQueue::new()));
+    #[cfg(feature = "sim-in-host")]
     let clock = SimClock::new();
     // Pass to hardware manager, motion system, and simulator
     let hardware_manager = HardwareManager::new(config.clone(), board.clone());
-    let motion_system = MotionSystem::new(event_queue.clone(), board.clone());
+    let motion_system = {
+        #[cfg(feature = "sim-in-host")]
+        { MotionSystem::new(event_queue.clone(), board.clone()) }
+        #[cfg(not(feature = "sim-in-host"))]
+        { MotionSystem::new(board.clone()) }
+    };
+    #[cfg(feature = "sim-in-host")]
     let simulator = Simulator::new(event_queue, clock);
 
     // Create the main Printer object.

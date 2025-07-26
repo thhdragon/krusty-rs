@@ -2,14 +2,15 @@ pub mod event_queue;
 
 use crate::simulator::event_queue::{SimEventQueue, SimClock};
 use std::sync::{Arc, Mutex};
+use krusty_shared::{HeaterState, ThermistorState, TemperatureController, ThermalEvent, StepCommand};
 
 pub struct Simulator {
     pub event_queue: Arc<Mutex<SimEventQueue>>,
     pub clock: SimClock,
     pub stepper_positions: [i64; 4], // X, Y, Z, E
-    pub heater: crate::hardware::temperature::HeaterState,
-    pub thermistor: crate::hardware::temperature::ThermistorState,
-    pub temp_controller: crate::hardware::temperature::TemperatureController, // NEW
+    pub heater: HeaterState,
+    pub thermistor: ThermistorState,
+    pub temp_controller: TemperatureController, // NEW
 }
 
 impl Simulator {
@@ -20,7 +21,7 @@ impl Simulator {
             event_queue,
             clock,
             stepper_positions: [0; 4],
-            heater: crate::hardware::temperature::HeaterState {
+            heater: HeaterState {
                 power: 0.0,
                 target_temp: 200.0,
                 current_temp: 25.0,
@@ -29,12 +30,12 @@ impl Simulator {
                 runaway_check_timer: 0.0, // NEW FIELD
                 runaway_enabled: false,   // NEW FIELD
             },
-            thermistor: crate::hardware::temperature::ThermistorState {
+            thermistor: ThermistorState {
                 measured_temp: 25.0,
                 noise: 0.5,
                 last_update: 0.0,
             },
-            temp_controller: crate::hardware::temperature::TemperatureController::new(2.0, 0.08, 3.0), // PID params tuned for realistic hotend
+            temp_controller: TemperatureController::new(2.0, 0.08, 3.0), // PID params tuned for realistic hotend
         }
     }
 
@@ -47,7 +48,7 @@ impl Simulator {
                 match event.event_type {
                     crate::simulator::event_queue::SimEventType::Step => {
                         if let Some(payload) = event.payload {
-                            if let Some(step_cmd) = payload.downcast_ref::<crate::motion::stepper::StepCommand>() {
+                            if let Some(step_cmd) = payload.downcast_ref::<StepCommand>() {
                                 // Update stepper state
                                 let axis = step_cmd.axis;
                                 let steps = step_cmd.steps as i64;
@@ -78,7 +79,7 @@ impl Simulator {
                             self.thermistor.measured_temp,
                             self.heater.runaway_detected);
                         match thermal_event {
-                            crate::hardware::temperature::ThermalEvent::RunawayDetected => {
+                            ThermalEvent::RunawayDetected => {
                                 println!("[ThermalEvent] Runaway detected! Heater shut off.");
                             }
                             _ => {}
@@ -113,7 +114,7 @@ impl Simulator {
                 match event.event_type {
                     crate::simulator::event_queue::SimEventType::Step => {
                         if let Some(payload) = event.payload {
-                            if let Some(step_cmd) = payload.downcast_ref::<crate::motion::stepper::StepCommand>() {
+                            if let Some(step_cmd) = payload.downcast_ref::<StepCommand>() {
                                 let axis = step_cmd.axis;
                                 let steps = step_cmd.steps as i64;
                                 let direction = if step_cmd.direction { 1 } else { -1 };
@@ -139,7 +140,7 @@ impl Simulator {
                             self.thermistor.measured_temp,
                             self.heater.runaway_detected);
                         match thermal_event {
-                            crate::hardware::temperature::ThermalEvent::RunawayDetected => {
+                            ThermalEvent::RunawayDetected => {
                                 println!("[ThermalEvent] Runaway detected! Heater shut off.");
                             }
                             _ => {}

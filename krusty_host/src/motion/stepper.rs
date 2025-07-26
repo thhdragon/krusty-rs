@@ -27,27 +27,6 @@ pub struct StepGenerator {
 
 // Remove the manual Clone implementation since we're using #[derive(Clone)]
 
-#[derive(Debug, Clone)]
-pub struct StepCommand {
-    pub axis: usize,
-    pub steps: u32,
-    pub direction: bool,
-}
-
-impl StepCommand {
-    pub fn to_mcu_command(&self) -> String {
-        let axis_name = match self.axis {
-            0 => "X",
-            1 => "Y",
-            2 => "Z",
-            3 => "E",
-            _ => "U",
-        };
-        
-        format!("step {} {} {}", axis_name, self.steps, if self.direction { 1 } else { 0 })
-    }
-}
-
 impl StepGenerator {
     pub fn new(steps_per_mm: [f64; 4], direction_invert: [bool; 4]) -> Self {
         Self {
@@ -57,7 +36,7 @@ impl StepGenerator {
         }
     }
 
-    pub fn generate_steps(&mut self, position: &[f64; 4]) -> Vec<StepCommand> {
+    pub fn generate_steps(&mut self, position: &[f64; 4]) -> Vec<krusty_shared::StepCommand> {
         let mut target_steps = [0i64; 4];
         for i in 0..4 {
             target_steps[i] = (position[i] * self.steps_per_mm[i]).round() as i64;
@@ -81,7 +60,7 @@ impl StepGenerator {
                     self.direction_invert[i]
                 };
                 
-                commands.push(StepCommand {
+                commands.push(krusty_shared::StepCommand {
                     axis: i,
                     steps,
                     direction,
