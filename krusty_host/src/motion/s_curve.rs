@@ -103,14 +103,14 @@ impl SCurveGenerator {
         endVelocity: f64,
         cruise_velocity: f64,
         axis: usize,
-        event_queue: &std::sync::Arc<std::sync::Mutex<krusty_simulator::simulator::event_queue::SimEventQueue>>,
-        clock: &krusty_simulator::simulator::event_queue::SimClock,
+        event_queue: &std::sync::Arc<std::sync::Mutex<krusty_shared::event_queue::SimEventQueue>>,
+        clock: &krusty_shared::event_queue::SimClock,
     ) -> Result<(), SCurveError> {
         let trajectory = self.generate_s_curve(distance, start_velocity, endVelocity, cruise_velocity)?;
         for point in trajectory {
-            let event = krusty_simulator::simulator::event_queue::SimEvent {
+            let event = krusty_shared::event_queue::SimEvent {
                 timestamp: clock.current_time + std::time::Duration::from_secs_f64(point.time),
-                event_type: krusty_simulator::simulator::event_queue::SimEventType::Step,
+                event_type: krusty_shared::event_queue::SimEventType::Step,
                 payload: Some(Box::new(krusty_shared::StepCommand {
                     axis,
                     steps: (point.position.round() as u32),
@@ -129,8 +129,8 @@ impl SCurveGenerator {
         start_velocities: [f64; 4],
         end_velocities: [f64; 4],
         cruise_velocities: [f64; 4],
-        event_queue: &std::sync::Arc<std::sync::Mutex<krusty_simulator::simulator::event_queue::SimEventQueue>>,
-        clock: &krusty_simulator::simulator::event_queue::SimClock,
+        event_queue: &std::sync::Arc<std::sync::Mutex<krusty_shared::event_queue::SimEventQueue>>,
+        clock: &krusty_shared::event_queue::SimClock,
     ) -> Result<(), SCurveError> {
         for axis in 0..4 {
             let trajectory = self.generate_s_curve(
@@ -140,9 +140,9 @@ impl SCurveGenerator {
                 cruise_velocities[axis],
             )?;
             for point in trajectory {
-                let event = krusty_simulator::simulator::event_queue::SimEvent {
+                let event = krusty_shared::event_queue::SimEvent {
                     timestamp: clock.current_time + std::time::Duration::from_secs_f64(point.time),
-                    event_type: krusty_simulator::simulator::event_queue::SimEventType::Step,
+                    event_type: krusty_shared::event_queue::SimEventType::Step,
                     payload: Some(Box::new(krusty_shared::StepCommand {
                         axis,
                         steps: (point.position.round() as u32),

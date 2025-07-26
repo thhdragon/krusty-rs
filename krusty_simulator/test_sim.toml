@@ -8,6 +8,8 @@ profile = "s_curve"
 max_speed = 200.0
 max_accel = 1000.0
 max_jerk = 20.0
+steps_per_mm = [80.0, 80.0, 400.0, 95.0]
+direction_invert = [false, false, false, false]
 
 [hardware]
 board = "default"

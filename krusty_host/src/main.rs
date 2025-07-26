@@ -3,7 +3,7 @@ use tokio::sync::mpsc;
 use tokio::task::LocalSet;
 use hardware::board_config::BoardConfig;
 #[cfg(feature = "sim-in-host")]
-use krusty_simulator::simulator::event_queue::{SimEventQueue, SimClock};
+use krusty_shared::event_queue::{SimEventQueue, SimClock};
 use hardware::HardwareManager;
 use motion::MotionSystem;
 #[cfg(feature = "sim-in-host")]

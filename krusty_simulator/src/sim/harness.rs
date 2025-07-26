@@ -103,7 +103,7 @@ fn main() {
             println!("Running scenario: {:?}", cli.scenario.as_deref().unwrap_or("baseline"));
             // --- Begin simulation setup ---
             use std::sync::{Arc, Mutex};
-            use krusty_rs::simulator::event_queue::{SimEventQueue, SimClock, SimEvent, SimEventType};
+            use krusty_shared::event_queue::{SimEventQueue, SimClock, SimEvent, SimEventType};
             use std::time::Duration;
             // 1. Create event queue and clock
             let event_queue = Arc::new(Mutex::new(SimEventQueue::new()));

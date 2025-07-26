@@ -30,7 +30,8 @@
 // src/motion/planner/snap_crackle.rs
 
 // Import necessary types from the parent module
-use super::{MotionSegment, MotionType};
+use super::{MotionSegment};
+use krusty_shared::trajectory::MotionType;
 use crate::motion::kinematics::KinematicsType;
 use crate::config::Config;
 

@@ -5,6 +5,7 @@ use crate::host_os::PrinterState;
 use crate::hardware::HardwareManager;
 use crate::motion::planner::MotionPlanner;
 use crate::motion::planner::adaptive::{PerformanceMonitor, VibrationAnalyzer, PerformanceMetrics, AdaptiveOptimizer, AdaptiveConfig};
+use krusty_shared::trajectory::MotionType;
 
 #[derive(Debug, Clone)]
 // MotionController struct definition follows
@@ -116,14 +117,14 @@ impl MotionController {
         if self.snap_crackle_enabled {
             // Call snap/crackle logic as a layer on top of planner
             // e.g., self.planner.apply_snap_crackle(...)
-            self.planner.plan_move(target_4d, feedrate, crate::motion::planner::MotionType::Print).await?;
+            self.planner.plan_move(target_4d, feedrate, MotionType::Print).await?;
         } else if self.adaptive_enabled {
             // Call adaptive logic as a layer on top of planner
             // e.g., self.planner.apply_adaptive(...)
-            self.planner.plan_move(target_4d, feedrate, crate::motion::planner::MotionType::Print).await?;
+            self.planner.plan_move(target_4d, feedrate, MotionType::Print).await?;
         } else {
             // Basic planner logic
-            self.planner.plan_move(target_4d, feedrate, crate::motion::planner::MotionType::Print).await?;
+            self.planner.plan_move(target_4d, feedrate, MotionType::Print).await?;
         }
         
         // Simulate feedback after move (replace with real sensor data when available)
@@ -167,13 +168,13 @@ impl MotionController {
         if self.snap_crackle_enabled {
             tracing::info!("Homing with snap/crackle feature enabled");
             // Insert snap/crackle-specific logic here if needed
-            self.planner.plan_move(home_target, 50.0, crate::motion::planner::MotionType::Home).await?;
+            self.planner.plan_move(home_target, 50.0, MotionType::Home).await?;
         } else if self.adaptive_enabled {
             tracing::info!("Homing with adaptive feature enabled");
             // Insert adaptive-specific logic here if needed
-            self.planner.plan_move(home_target, 50.0, crate::motion::planner::MotionType::Home).await?;
+            self.planner.plan_move(home_target, 50.0, MotionType::Home).await?;
         } else {
-            self.planner.plan_move(home_target, 50.0, crate::motion::planner::MotionType::Home).await?;
+            self.planner.plan_move(home_target, 50.0, MotionType::Home).await?;
         }
         self.current_position = home_target;
         let _ = self.hardware_manager.send_command("home_all").await;

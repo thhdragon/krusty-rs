@@ -1,6 +1,6 @@
 pub mod event_queue;
 
-use crate::simulator::event_queue::{SimEventQueue, SimClock};
+use krusty_shared::event_queue::{SimEventQueue, SimClock, SimEvent, SimEventType};
 use std::sync::{Arc, Mutex};
 use krusty_shared::{HeaterState, ThermistorState, TemperatureController, ThermalEvent, StepCommand};
 
@@ -46,7 +46,7 @@ impl Simulator {
             if let Some(event) = queue.pop() {
                 self.clock.advance(event.timestamp - self.clock.current_time);
                 match event.event_type {
-                    crate::simulator::event_queue::SimEventType::Step => {
+                    SimEventType::Step => {
                         if let Some(payload) = event.payload {
                             if let Some(step_cmd) = payload.downcast_ref::<StepCommand>() {
                                 // Update stepper state
@@ -58,7 +58,7 @@ impl Simulator {
                             }
                         }
                     }
-                    crate::simulator::event_queue::SimEventType::HeaterUpdate => {
+                    SimEventType::HeaterUpdate => {
                         // Heater/thermistor physics update
                         let dt = 0.1; // 100ms step
                         let ambient = 25.0;
@@ -86,9 +86,9 @@ impl Simulator {
                         }
                         // Schedule next update
                         let next_time = self.clock.current_time + std::time::Duration::from_millis(100);
-                        queue.push(crate::simulator::event_queue::SimEvent {
+                        queue.push(SimEvent {
                             timestamp: next_time,
-                            event_type: crate::simulator::event_queue::SimEventType::HeaterUpdate,
+                            event_type: SimEventType::HeaterUpdate,
                             payload: None,
                         });
                     }
@@ -112,7 +112,7 @@ impl Simulator {
             if let Some(event) = queue.pop() {
                 self.clock.advance(event.timestamp - self.clock.current_time);
                 match event.event_type {
-                    crate::simulator::event_queue::SimEventType::Step => {
+                    SimEventType::Step => {
                         if let Some(payload) = event.payload {
                             if let Some(step_cmd) = payload.downcast_ref::<StepCommand>() {
                                 let axis = step_cmd.axis;
@@ -123,7 +123,7 @@ impl Simulator {
                             }
                         }
                     }
-                    crate::simulator::event_queue::SimEventType::HeaterUpdate => {
+                    SimEventType::HeaterUpdate => {
                         let dt = 0.1;
                         let ambient = 25.0;
                         self.temp_controller.update_temperature(self.heater.current_temp as f64);
@@ -146,9 +146,9 @@ impl Simulator {
                             _ => {}
                         }
                         let next_time = self.clock.current_time + std::time::Duration::from_millis(100);
-                        queue.push(crate::simulator::event_queue::SimEvent {
+                        queue.push(SimEvent {
                             timestamp: next_time,
-                            event_type: crate::simulator::event_queue::SimEventType::HeaterUpdate,
+                            event_type: SimEventType::HeaterUpdate,
                             payload: None,
                         });
                     }

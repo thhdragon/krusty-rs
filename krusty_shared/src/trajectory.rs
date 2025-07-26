@@ -1,6 +1,4 @@
-// This file has been moved to krusty_shared/src/trajectory.rs
-// Please update all imports to use krusty_shared::trajectory
-
+// src/trajectory.rs - Shared trajectory generation logic
 use std::collections::VecDeque;
 use thiserror::Error;
 

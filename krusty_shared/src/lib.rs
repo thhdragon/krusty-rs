@@ -1,5 +1,9 @@
 // krusty_shared: shared traits and types for host, simulator, and MCU
 
+pub mod event_queue;
+pub mod gcode_utils;
+pub mod trajectory;
+
 // --- Shared Traits and Types ---
 
 // TimeInterface trait
@@ -201,4 +205,106 @@ impl StepCommand {
         };
         format!("step {} {} {}", axis_name, self.steps, if self.direction { 1 } else { 0 })
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct StepGenerator {
+    pub steps_per_mm: [f64; 4],
+    pub direction_invert: [bool; 4],
+    pub current_steps: [i64; 4],
+}
+
+impl StepGenerator {
+    pub fn new(steps_per_mm: [f64; 4], direction_invert: [bool; 4]) -> Self {
+        Self {
+            steps_per_mm,
+            direction_invert,
+            current_steps: [0; 4],
+        }
+    }
+
+    pub fn generate_steps(&mut self, position: &[f64; 4]) -> Vec<StepCommand> {
+        let mut target_steps = [0i64; 4];
+        for i in 0..4 {
+            target_steps[i] = (position[i] * self.steps_per_mm[i]).round() as i64;
+        }
+        let mut step_deltas = [0i64; 4];
+        for i in 0..4 {
+            step_deltas[i] = target_steps[i] - self.current_steps[i];
+        }
+        self.current_steps = target_steps;
+        let mut commands = Vec::new();
+        for i in 0..4 {
+            if step_deltas[i] != 0 {
+                let steps = step_deltas[i].abs() as u32;
+                let direction = if step_deltas[i] > 0 {
+                    !self.direction_invert[i]
+                } else {
+                    self.direction_invert[i]
+                };
+                commands.push(StepCommand {
+                    axis: i,
+                    steps,
+                    direction,
+                });
+            }
+        }
+        commands
+    }
+
+    pub fn reset_steps(&mut self) {
+        self.current_steps = [0; 4];
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct FanState {
+    pub power: f32,    // 0.0-1.0
+    pub is_on: bool,
+    pub rpm: f32,      // Simulated RPM
+}
+
+impl FanState {
+    pub fn update(&mut self, dt: f32) {
+        let target_rpm = if self.is_on { self.power * 2500.0 } else { 0.0 };
+        let ramp = 500.0 * dt;
+        if self.rpm < target_rpm {
+            self.rpm = (self.rpm + ramp).min(target_rpm);
+        } else {
+            self.rpm = (self.rpm - ramp).max(target_rpm);
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SwitchState {
+    pub is_on: bool,
+    pub debounce_counter: u32, // For future debounce simulation
+}
+
+impl SwitchState {
+    pub fn update(&mut self, _dt: f32) {
+        // For now, no debounce simulation
+    }
+}
+
+use serde::{Serialize, Deserialize};
+
+#[derive(Debug, Default, Clone, Serialize)]
+pub struct Position {
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
+    pub e: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct HardwareState {
+    pub heater_on: bool, // LEGACY: use heater_state.is_on instead
+    pub fan_on: bool,    // LEGACY: not yet simulated
+    pub switch_on: bool, // LEGACY: not yet simulated
+    pub heater_state: HeaterState,
+    pub thermistor_state: ThermistorState,
+    pub fan_state: FanState, // Simulated fan state
+    pub switch_state: SwitchState, // Simulated switch state
 }

@@ -11,7 +11,7 @@ pub mod stepper;
 
 use crate::hardware::board_config::BoardConfig;
 #[cfg(feature = "sim-in-host")]
-use krusty_simulator::simulator::event_queue::SimEventQueue;
+use krusty_shared::event_queue::SimEventQueue;
 
 /// Statistics for the motion queue
 #[derive(Debug, Clone, Default)]

@@ -44,15 +44,8 @@ pub enum MotionError {
 }
 
 // Re-export shared types if they were defined here or move them here.
-// For now, assuming MotionType and core structs are defined here.
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum MotionType {
-    Print,
-    Travel,
-    Home,
-    // Extruder, // Commented out as not used immediately
-}
+// Use shared MotionType from krusty_shared
+use krusty_shared::trajectory::MotionType;
 
 #[derive(Debug, Clone)]
 pub struct MotionConfig {
