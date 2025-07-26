@@ -8,3 +8,10 @@
 [submodule "sim_reference/virtual-klipper-printer"]
 	path = sim_reference/virtual-klipper-printer
 	url = https://github.com/thhdragon/virtual-klipper-printer.git
+[submodule "sim_reference/RepRapFirmware"]
+	path = sim_reference/RepRapFirmware
+	url = https://github.com/Duet3D/RepRapFirmware.git
+[submodule "sim_reference/kalico"]
+	path = sim_reference/kalico
+	url = https://github.com/KalicoCrew/kalico.git
+	branch = bleeding-edge-v2
