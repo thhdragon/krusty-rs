@@ -27,8 +27,8 @@ impl TokioEventSystem {
 #[async_trait]
 impl EventInterface for TokioEventSystem {
     type Event = String;
-    async fn send_event(&self, event: Self::Event) -> Result<(), Box<dyn std::error::Error>> {
-        self.sender.send(event).await.map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
+    async fn send_event(&self, event: Self::Event) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
+        self.sender.send(event).await.map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync + 'static>)
     }
     async fn recv_event(&self) -> Option<Self::Event> {
         let mut rx = self.receiver.lock().await;

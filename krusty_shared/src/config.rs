@@ -237,11 +237,11 @@ impl ConfigManager {
         }
     }
 
-    pub fn load_config(config_path: &str) -> Result<Config, Box<dyn std::error::Error>> {
+    pub fn load_config(config_path: &str) -> Result<Config, Box<dyn std::error::Error + Send + Sync + 'static>> {
         Ok(load_config(config_path)?)
     }
 
-    pub async fn save_config(&self, config: &Config) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn save_config(&self, config: &Config) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         use std::io::Write;
         let toml_string = toml::to_string(config)?;
         let mut file = std::fs::File::create(&self.config_path)?;
@@ -249,7 +249,7 @@ impl ConfigManager {
         Ok(())
     }
 
-    pub fn reload_config(&self) -> Result<Config, Box<dyn std::error::Error>> {
+    pub fn reload_config(&self) -> Result<Config, Box<dyn std::error::Error + Send + Sync + 'static>> {
         Self::load_config(&self.config_path)
     }
 
@@ -268,7 +268,7 @@ impl ConfigManager {
         }
     }
 
-    pub fn restore_backup(&mut self, index: usize) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn restore_backup(&mut self, index: usize) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         if index < self.backup_configs.len() {
             self.config = self.backup_configs[index].clone();
             Ok(())

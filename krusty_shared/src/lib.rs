@@ -31,8 +31,8 @@ pub trait TimeInterface: Send + Sync {
 
 // Kinematics traits
 pub trait Kinematics: KinematicsClone + Send + Sync {
-    fn cartesian_to_motors(&self, cartesian: &[f64; 3]) -> Result<[f64; 4], Box<dyn std::error::Error>>;
-    fn motors_to_cartesian(&self, motors: &[f64; 4]) -> Result<[f64; 3], Box<dyn std::error::Error>>;
+    fn cartesian_to_motors(&self, cartesian: &[f64; 3]) -> Result<[f64; 4], Box<dyn std::error::Error + Send + Sync + 'static>>;
+    fn motors_to_cartesian(&self, motors: &[f64; 4]) -> Result<[f64; 3], Box<dyn std::error::Error + Send + Sync + 'static>>;
     fn is_valid_position(&self, cartesian: &[f64; 3]) -> bool;
 }
 

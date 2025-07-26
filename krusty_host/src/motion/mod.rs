@@ -17,13 +17,7 @@ pub use krusty_shared::trajectory::{
     MotionType, TrajectoryConfig, TrajectoryError, TrajectoryGenerator, TrajectorySegment,
 };
 
-/// Statistics for the motion queue
-#[derive(Debug, Clone, Default)]
-pub struct QueueStats {
-    pub length: usize,
-    pub max_length: usize,
-    pub last_command: Option<String>,
-}
+pub use krusty_shared::motion::QueueStats;
 
 #[cfg(feature = "sim-in-host")]
 pub struct MotionSystem {

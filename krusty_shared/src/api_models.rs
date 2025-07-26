@@ -53,3 +53,34 @@ pub struct TokenCheckResponse {
 pub struct GcodeCommandRequest {
     pub command: String,
 }
+
+#[derive(Debug, Clone)]
+pub struct PrinterState {
+    pub ready: bool,
+    pub position: [f64; 3], // X, Y, Z
+    pub temperature: f64,
+    pub bed_temperature: f64,
+    pub print_progress: f64,
+    pub printing: bool,
+    pub paused: bool,
+}
+
+impl PrinterState {
+    pub fn new() -> Self {
+        Self {
+            ready: false,
+            position: [0.0, 0.0, 0.0],
+            temperature: 0.0,
+            bed_temperature: 0.0,
+            print_progress: 0.0,
+            printing: false,
+            paused: false,
+        }
+    }
+}
+
+impl Default for PrinterState {
+    fn default() -> Self {
+        Self::new()
+    }
+}

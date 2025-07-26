@@ -246,7 +246,7 @@ impl PrinterHostOS {
     }
 
     /// Process a G-code command using the GCodeProcessor
-    pub async fn process_gcode_command(&mut self, gcode: &str) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn process_gcode_command(&mut self, gcode: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         self.gcode_processor.process_command(gcode).await?;
         Ok(())
     }
@@ -301,7 +301,7 @@ impl PrinterHostOS {
         &self.event_bus
     }
     /// Create new Host OS instance with pre-loaded configuration
-    pub async fn new_with_config(config: Config) -> Result<Self, Box<dyn std::error::Error>> {
+    pub async fn new_with_config(config: Config) -> Result<Self, Box<dyn std::error::Error + Send + Sync + 'static>> {
         let config_path = "printer.toml".to_string(); // Default path
         let config_manager = ConfigManager::new(config.clone(), config_path);
 
@@ -354,7 +354,7 @@ impl PrinterHostOS {
     }
 
     /// Initialize the entire system
-    pub async fn initialize(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn initialize(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         tracing::info!("Initializing 3D Printer Host OS");
         
         // Initialize hardware
@@ -377,7 +377,7 @@ impl PrinterHostOS {
     }
 
     /// Start main processing loops
-    pub async fn start(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn start(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         tracing::info!("Starting Host OS processing loops");
         
         // Start hardware response processing
@@ -401,7 +401,7 @@ impl PrinterHostOS {
         Ok(())
     }
     /// G-code processing loop
-    async fn start_gcode_processing_loop(&self) -> Result<(), Box<dyn std::error::Error>> {
+    async fn start_gcode_processing_loop(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         let mut shutdown_rx = self.shutdown_tx.subscribe();
         let gcode_processor = self.gcode_processor.clone();
         tokio::task::spawn_local(async move {
@@ -425,13 +425,13 @@ impl PrinterHostOS {
     }
 
     /// Printer main loop (stub for future use)
-    async fn start_printer_main_loop(&self) -> Result<(), Box<dyn std::error::Error>> {
+    async fn start_printer_main_loop(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         // Example: monitor printer state, update progress, etc.
         Ok(())
     }
 
     /// Main hardware processing loop
-    async fn start_hardware_loop(&self) -> Result<(), Box<dyn std::error::Error>> {
+    async fn start_hardware_loop(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         let mut shutdown_rx = self.shutdown_tx.subscribe();
         let hardware_manager = self.hardware_manager.clone();
         let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(10));
@@ -449,7 +449,7 @@ impl PrinterHostOS {
     }
 
     /// Motion control processing loop
-    async fn start_motion_loop(&self) -> Result<(), Box<dyn std::error::Error>> {
+    async fn start_motion_loop(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         let mut shutdown_rx = self.shutdown_tx.subscribe();
         let motion_controller = self.motion_controller.clone();
         let mut interval = tokio::time::interval(tokio::time::Duration::from_micros(100));
@@ -468,13 +468,13 @@ impl PrinterHostOS {
     }
 
     /// Web interface processing loop
-    async fn start_web_loop(&self) -> Result<(), Box<dyn std::error::Error>> {
+    async fn start_web_loop(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         // Web interface runs independently
         Ok(())
     }
 
     /// File monitoring loop
-    async fn start_file_monitoring(&self) -> Result<(), Box<dyn std::error::Error>> {
+    async fn start_file_monitoring(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         let mut shutdown_rx = self.shutdown_tx.subscribe();
         let file_manager = self.file_manager.clone();
         
@@ -496,7 +496,7 @@ impl PrinterHostOS {
     }
 
     /// Load and start a G-code file
-    pub async fn load_gcode_file(&mut self, file_path: &str) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn load_gcode_file(&mut self, file_path: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         tracing::info!("Loading G-code file: {}", file_path);
         
         let gcode_content = self.file_manager.read_file(file_path).await?;
@@ -516,7 +516,7 @@ impl PrinterHostOS {
     }
 
     /// Start printing the loaded file
-    pub async fn start_print(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn start_print(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         tracing::info!("Starting print job");
         
         {
@@ -536,7 +536,7 @@ impl PrinterHostOS {
     }
 
     /// Pause current print
-    pub async fn pause_print(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn pause_print(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         tracing::info!("Pausing print job");
         
         {
@@ -557,7 +557,7 @@ impl PrinterHostOS {
     }
 
     /// Resume paused print
-    pub async fn resume_print(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn resume_print(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         tracing::info!("Resuming print job");
         
         {
@@ -575,7 +575,7 @@ impl PrinterHostOS {
     }
 
     /// Cancel current print
-    pub async fn cancel_print(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn cancel_print(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         tracing::info!("Canceling print job");
         
         {
@@ -600,7 +600,7 @@ impl PrinterHostOS {
     }
 
     /// Home all axes
-    pub async fn home_all(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn home_all(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         tracing::info!("Homing all axes");
         {
             let mut controller = self.motion_controller.write().await;
@@ -616,7 +616,7 @@ impl PrinterHostOS {
         y: Option<f64>,
         z: Option<f64>,
         feedrate: Option<f64>,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         // Get current position
         let current_pos = {
             let state = self.state.read().await;
@@ -640,7 +640,7 @@ impl PrinterHostOS {
     }
 
     /// Set hotend temperature
-    pub async fn set_hotend_temperature(&self, temperature: f64) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn set_hotend_temperature(&self, temperature: f64) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         tracing::info!("Setting hotend temperature to {:.1}°C", temperature);
         self.hardware_manager
             .set_heater_temperature("hotend", temperature)
@@ -652,7 +652,7 @@ impl PrinterHostOS {
     }
 
     /// Set bed temperature
-    pub async fn set_bed_temperature(&self, temperature: f64) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn set_bed_temperature(&self, temperature: f64) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         tracing::info!("Setting bed temperature to {:.1}°C", temperature);
         self.hardware_manager
             .set_heater_temperature("bed", temperature)
@@ -684,7 +684,7 @@ impl PrinterHostOS {
     }
 
     /// Emergency stop
-    pub async fn emergency_stop(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn emergency_stop(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         tracing::warn!("EMERGENCY STOP ACTIVATED");
         
         // Stop all motion
@@ -709,14 +709,14 @@ impl PrinterHostOS {
     }
 
     /// Save current configuration
-    pub async fn save_config(&self) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn save_config(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         let config = self.config_manager.get_config();
         self.config_manager.save_config(&config).await?;
         Ok(())
     }
 
     /// Reload configuration
-    pub async fn reload_config(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn reload_config(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         let _ = self.config_manager.reload_config()?; // Unused, for future config reload logic
         // Apply new configuration to all components
         // This would require reinitializing components
@@ -724,7 +724,7 @@ impl PrinterHostOS {
     }
 
     /// Shutdown the entire system
-    pub async fn shutdown(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn shutdown(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         tracing::info!("Shutting down Host OS");
         
         // Broadcast shutdown signal

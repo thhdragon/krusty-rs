@@ -5,7 +5,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use crate::motion::MotionController;
 use crate::host_os::PrinterState;
-use krusty_shared::gcode::{MacroProcessor, GCodeError, OwnedGCodeCommand};
+use krusty_shared::gcode::{MacroProcessor, GCodeError, OwnedGCodeCommand, GCodeCommand};
 
 
 // Trait for executing parsed G-code commands in a real-world system.
@@ -209,7 +209,7 @@ impl GCodeProcessor {
     /// Process a single G-code command string.
     pub async fn process_command(&mut self, command: &str) -> Result<(), GCodeError> {
         let macros = self.macros.clone();
-        let results = macros.parse_and_expand_async_owned(command).await;
+        let results = macros.as_ref().parse_and_expand_async_owned(command).await;
         let mut handled_any = false;
         let mut commands_to_process = Vec::new();
         for cmd_result in results {

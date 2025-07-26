@@ -162,24 +162,73 @@ Based on a thorough review of the `krusty_host` codebase and the modularization 
 
 ---
 
-## Migration Plan
+## Findings: Additional Logic to Move from `krusty_host` to `krusty_shared` (2025 Deep Review)
 
-```markdown
-- [ ] Move `QueueStats` from `krusty_host::motion` to `krusty_shared::motion`
-- [ ] Move `MotionMode` enum and related feature toggles to `krusty_shared::motion`
-- [ ] Refactor `MotionController` for hardware-agnostic logic and migrate to `krusty_shared::motion`
-- [ ] Move `GCodeExecutor` trait and `GCodeProcessor` core logic to `krusty_shared::gcode`
-- [ ] Migrate `FileManager` and file processing logic to `krusty_shared::file_manager`
-- [ ] Move `HardwareError`, `FanState`, `ThermistorState`, `HeaterState`, and `CommandStats` to `krusty_shared::hardware_traits`
-- [ ] Move `PrinterState` to `krusty_shared::api_models` or a new `state` module
-- [ ] Ensure all shared configuration types/enums are defined in `krusty_shared::config`
-- [ ] Unify all trait-based abstractions for hardware, motion, and events in `krusty_shared`
-- [ ] Update host and simulator to import shared logic from `krusty_shared`
-```
+Based on a detailed review of the current `krusty_host` codebase, the following logic and types should be migrated to `krusty_shared` to maximize code reuse, ensure simulation/host parity, and maintain a clean separation of concerns:
 
-**Rationale:**  
-This migration will ensure all reusable, hardware-agnostic logic is centralized in `krusty_shared`, enabling robust simulation, CI, and future maintainability. Host and simulator will only contain orchestration, I/O, and environment-specific code.
+### 1. Motion Planning and Kinematics
+
+- **MotionController struct and core logic** (`motion/controller.rs`):  
+  - The core queueing, updating, and management logic is hardware-agnostic and should be abstracted for reuse.
+  - Any host-specific dependencies (e.g., hardware manager) should be injected via traits or interfaces.
+  - The `MotionMode` enum is already re-exported from `krusty_shared`, but ensure all feature toggling logic is unified.
+
+- **MotionSystem struct** (`motion/mod.rs`):  
+  - The struct is a thin wrapper, but any generic orchestration logic should be shared if used by both host and simulator.
+
+### 2. G-code Processing
+
+- **GCodeExecutor trait** (`gcode/mod.rs`):  
+  - Pure interface for executing parsed G-code commands.  
+  - Should be moved to `krusty_shared::gcode`.
+
+- **GCodeProcessor struct and core logic** (`gcode/mod.rs`):  
+  - Parsing, macro expansion, and command dispatch logic is generic and should be shared.
+  - Host-specific state (e.g., PrinterState) should be abstracted.
+
+### 3. File Management
+
+- **FileManager struct and logic** (`file_manager.rs`):  
+  - Reading, writing, and listing files, as well as G-code file processing, is generic and can be shared.
+  - Any OS-specific logic should be isolated behind traits.
+
+### 4. Hardware Traits and State
+
+- **HardwareError, FanState, ThermistorState, HeaterState, CommandStats** (`hardware/mod.rs`):  
+  - Error types and state representations are generic and should be defined in `krusty_shared::hardware_traits` or `krusty_shared::hardware`.
+  - `CommandStats` struct for hardware command statistics should be shared.
+
+### 5. Statistics and State Types
+
+- **PrinterState struct** (`host_os.rs`):  
+  - Represents the printer's runtime state (position, temperature, progress, etc.).
+  - Should be moved to `krusty_shared::api_models` or a new `state` module for use by both host and simulator.
+
+### 6. Configuration Types
+
+- **All configuration structures and enums referenced by both host and simulator** (`config.rs`):  
+  - Shaper types, planner config, blending options, etc., should be defined in `krusty_shared::config`.
+  - Host should only re-export or extend these as needed.
+
+### 7. Traits and Interfaces
+
+- **Any trait-based abstractions for hardware, motion, or event systems**  
+  - Should be unified in `krusty_shared` to ensure both host and simulator can implement and use them.
 
 ---
 
-_Appended by automated codebase analysis, July 2025._
+## Migration Plan: krusty_host → krusty_shared
+
+- [ ] Move `MotionController` and related feature toggling logic to `krusty_shared::motion`.
+- [ ] Move `GCodeExecutor` trait and `GCodeProcessor` core logic to `krusty_shared::gcode`.
+- [ ] Move `FileManager` and file processing logic to `krusty_shared::file_manager`.
+- [ ] Move `HardwareError`, `FanState`, `ThermistorState`, `HeaterState`, and `CommandStats` to `krusty_shared::hardware_traits` or `hardware`.
+- [ ] Move `PrinterState` to `krusty_shared::api_models` or a new `state` module.
+- [ ] Ensure all shared configuration types are defined in `krusty_shared::config`.
+- [ ] Audit for any additional trait-based abstractions and unify them in `krusty_shared`.
+
+---
+
+**Rationale:**  
+This migration will ensure all hardware-agnostic logic is shared, maximize code reuse, and maintain a clean separation between host, simulator, and firmware. Host-specific logic will remain in `krusty_host`, while all reusable types, traits, and logic will live in `krusty_shared`.
+

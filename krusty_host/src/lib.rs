@@ -10,7 +10,7 @@ pub use config::*;
 pub use config::Config;
 pub use config::MotionConfig;
 pub mod gcode;
-pub use krusty_shared::gcode::{GCodeCommand, GCodeParser, GCodeParserConfig, MacroProcessor};
+pub use krusty_shared::gcode::{GCodeCommand, GCodeParserConfig, MacroProcessor};
 // pub mod print_job; // migrated to krusty_shared or handled via direct use
 pub mod file_manager;
 pub use file_manager::*;

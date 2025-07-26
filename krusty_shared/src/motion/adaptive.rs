@@ -89,7 +89,7 @@ impl AdaptiveOptimizer {
         &mut self,
         metrics: &PerformanceMetrics,
         vibration_analysis: &VibrationAnalysis,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         let performance_data = PerformanceData {
             timestamp: std::time::Instant::now(),
             print_quality: self.calculate_print_quality(metrics, vibration_analysis),
@@ -124,7 +124,7 @@ impl AdaptiveOptimizer {
         &mut self,
         metrics: &PerformanceMetrics,
         vibration_analysis: &VibrationAnalysis,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         let adaptation_rate = self.config.adaptation_rate;
         if metrics.avg_vibration < 0.005 && metrics.position_accuracy < 0.002 {
             self.optimization_params.junction_deviation =

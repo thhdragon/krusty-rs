@@ -6,17 +6,17 @@ pub struct LinuxSerial;
 
 #[async_trait]
 impl SerialInterface for LinuxSerial {
-    async fn open(&self, port: &str, baud: u32) -> Result<serial2_tokio::SerialPort, Box<dyn std::error::Error>> {
+    async fn open(&self, port: &str, baud: u32) -> Result<serial2_tokio::SerialPort, Box<dyn std::error::Error + Send + Sync + 'static>> {
         let serial = serial2_tokio::SerialPort::open(port, baud)?;
         Ok(serial)
     }
 
-    async fn read(&self, port: &serial2_tokio::SerialPort, buf: &mut [u8]) -> Result<usize, Box<dyn std::error::Error>> {
+    async fn read(&self, port: &serial2_tokio::SerialPort, buf: &mut [u8]) -> Result<usize, Box<dyn std::error::Error + Send + Sync + 'static>> {
         let n = port.read(buf).await?;
         Ok(n)
     }
 
-    async fn write(&self, port: &serial2_tokio::SerialPort, buf: &[u8]) -> Result<usize, Box<dyn std::error::Error>> {
+    async fn write(&self, port: &serial2_tokio::SerialPort, buf: &[u8]) -> Result<usize, Box<dyn std::error::Error + Send + Sync + 'static>> {
         let n = port.write(buf).await?;
         Ok(n)
     }

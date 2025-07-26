@@ -22,11 +22,11 @@ impl WebInterface {
         Self { state }
     }
 
-    pub async fn start(&self) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn start(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         Ok(())
     }
 
-    pub async fn shutdown(&self) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn shutdown(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         Ok(())
     }
 }

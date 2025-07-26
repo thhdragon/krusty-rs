@@ -106,7 +106,7 @@ impl VibrationCanceller {
     pub fn new() -> Self {
         Self
     }
-    pub async fn cancel_vibrations(&self, profile: Vec<MotionPoint7D>) -> Result<Vec<MotionPoint7D>, Box<dyn std::error::Error>> {
+    pub async fn cancel_vibrations(&self, profile: Vec<MotionPoint7D>) -> Result<Vec<MotionPoint7D>, Box<dyn std::error::Error + Send + Sync + 'static>> {
         Ok(profile)
     }
 }
@@ -118,7 +118,7 @@ impl SnapCrackleOptimizer {
     pub fn new() -> Self {
         Self
     }
-    pub async fn optimize_constraints(&self, _start: &MotionState7D, _end: &MotionState7D, constraints: &MotionConstraints) -> Result<MotionConstraints, Box<dyn std::error::Error>> {
+    pub async fn optimize_constraints(&self, _start: &MotionState7D, _end: &MotionState7D, constraints: &MotionConstraints) -> Result<MotionConstraints, Box<dyn std::error::Error + Send + Sync + 'static>> {
         Ok(constraints.clone())
     }
 }
